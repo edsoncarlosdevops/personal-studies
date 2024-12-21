@@ -2,7 +2,7 @@
 terraform {
   backend "s3" {
     bucket         = "remote-state-edsoncarlos"          # Name of the S3 bucket
-    key            = "state/terraform.tfstate"           # Path to store the Terraform state file
+    key            = "ec2-instance/terraform.tfstate"           # Path to store the Terraform state file
     region         = "us-east-1"                         # AWS region
     dynamodb_table = "terraform-locks"                   # Name of the DynamoDB table for state locking
     encrypt        = true                                # Enables encryption for the state file
