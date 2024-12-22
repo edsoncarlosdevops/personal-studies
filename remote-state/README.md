@@ -23,6 +23,7 @@ terraform-project/
 │   ├── main.tf         # Security Group configuration
 │   ├── provider.tf     # AWS provider configuration
 └── provider.tf         # Centralized provider configuration for the project
+```plaintext
 
 
 # Key Features
