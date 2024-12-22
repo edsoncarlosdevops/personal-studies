@@ -55,15 +55,16 @@ terraform-project/
    cd ec2-instance
 
 
-## Apply Changes
+## 3. Apply Changes
 
 1. Apply the Terraform configuration in the directory:
    ```shel
    terraform apply
     ```
 
+2.	Repeat for other directories (s3-bucket and security-group) as needed.
 
-## Verify Remote State
+## 4. Verify Remote State
 
 1. Open the AWS S3 console.
 2. Check the `remote-state-edsoncarlos` bucket for state files:
@@ -86,9 +87,6 @@ provider "aws" {
 }
 ```
 
-
-## Customizing the Configuration
-
 ### 2. State File Keys
 
 Modify the `key` in `backend.tf` to adjust the location of the state file:
@@ -97,7 +95,7 @@ key = "ec2-instance/terraform.tfstate"
 ```
 
 
-## Tags
+## 3. Tags
 
 Ensure all resources include appropriate tags for identification:
 
