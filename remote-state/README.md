@@ -10,19 +10,19 @@ The project is organized into separate directories for each AWS resource, with e
 
 ```
 terraform-project/
-├── ec2-instance/       # Manages EC2 instance provisioning
-│   ├── backend.tf      # Backend configuration for remote state
-│   ├── main.tf         # EC2 instance configuration
-│   ├── provider.tf     # AWS provider configuration
-├── s3-bucket/          # Manages S3 bucket creation
-│   ├── backend.tf      # Backend configuration for remote state
-│   ├── main.tf         # S3 bucket configuration
-│   ├── provider.tf     # AWS provider configuration
-├── security-group/     # Manages Security Group setup
-│   ├── backend.tf      # Backend configuration for remote state
-│   ├── main.tf         # Security Group configuration
-│   ├── provider.tf     # AWS provider configuration
-└── provider.tf         # Centralized provider configuration for the project
+├── ec2-instance/       
+│   ├── backend.tf     
+│   ├── main.tf         
+│   ├── provider.tf    
+├── s3-bucket/          
+│   ├── backend.tf     
+│   ├── main.tf         
+│   ├── provider.tf    
+├── security-group/     
+│   ├── backend.tf     
+│   ├── main.tf         
+│   ├── provider.tf   
+└── provider.tf         
 ```
 
 
