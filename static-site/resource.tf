@@ -11,6 +11,14 @@ resource "aws_s3_bucket_public_access_block" "bucket1" {
   restrict_public_buckets = false
 }
 
+resource "aws_s3_bucket_versioning" "bucket1" {
+  bucket = aws_s3_bucket.bucket1.id
+
+  versioning_configuration {
+    status = "Enabled"
+  }
+}
+
 resource "aws_s3_object" "index" {
   bucket       = aws_s3_bucket.bucket1.id
   key          = "index.html"
