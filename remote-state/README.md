@@ -8,7 +8,7 @@ This project demonstrates how to manage Terraform remote states with S3 and Dyna
 
 The project is organized into separate directories for each AWS resource, with each directory managing its own Terraform state.
 
-```plaintext
+```
 terraform-project/
 ├── ec2-instance/       # Manages EC2 instance provisioning
 │   ├── backend.tf      # Backend configuration for remote state
@@ -23,7 +23,7 @@ terraform-project/
 │   ├── main.tf         # Security Group configuration
 │   ├── provider.tf     # AWS provider configuration
 └── provider.tf         # Centralized provider configuration for the project
-```plaintext
+```
 
 
 # Key Features
@@ -58,8 +58,9 @@ terraform-project/
 ## Apply Changes
 
 1. Apply the Terraform configuration in the directory:
-   ```bash
+   ```shel
    terraform apply
+    ```
 
 
 ## Verify Remote State
@@ -79,28 +80,33 @@ terraform-project/
 
 Update the AWS region in `provider.tf`:
 
-```hcl
+```
 provider "aws" {
   region = "us-east-1"  # Change to your desired region
 }
+```
+
 
 ## Customizing the Configuration
 
 ### 2. State File Keys
 
 Modify the `key` in `backend.tf` to adjust the location of the state file:
-```hcl
+```
 key = "ec2-instance/terraform.tfstate"
+```
 
 
 ## Tags
 
 Ensure all resources include appropriate tags for identification:
 
-```hcl
+```
 tags = {
   Name = "Example Resource"
 }
+```
+
 
 ## Troubleshooting
 
