@@ -1,0 +1,43 @@
+# Grafana Helm Chart Configuration
+replicaCount: ${grafana_replica_count}
+
+resources:
+  limits:
+    cpu: 500m
+    memory: 768Mi
+  requests:
+    cpu: 200m
+    memory: 128Mi
+
+persistence:
+  enabled: false  # Disabled to allow multiple replicas
+  storageClass: oci
+  accessMode: ReadWriteOnce
+  size: 10Gi
+
+datasources:
+  datasources.yaml:
+    apiVersion: 1
+    datasources:
+      - name: Prometheus
+        type: prometheus
+        access: proxy
+        url: http://prometheus-server:80
+        isDefault: true
+        jsonData:
+          httpMethod: POST
+
+      - name: Loki
+        type: loki
+        access: proxy
+        url: http://loki:3100
+        jsonData:
+          timeout: 60
+          maxLines: 1000
+
+      - name: Tempo
+        type: tempo
+        access: proxy
+        url: http://tempo:3200
+        jsonData:
+          traces: true
