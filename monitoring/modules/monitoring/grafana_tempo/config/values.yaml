@@ -1,0 +1,27 @@
+replicas: 1
+
+tempo:
+  repository: grafana/tempo
+  tag: 2.3.1
+  
+  # Configuração para rodar local sem S3
+  storage:
+    trace:
+      backend: local 
+      local:
+        path: /var/tempo/traces
+      wal:
+        path: /var/tempo/wal
+
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+
+persistence:
+  enabled: true
+  size: 5Gi
+  storageClass: "standard"

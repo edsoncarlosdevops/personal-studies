@@ -1,0 +1,60 @@
+# --- Configurações de Nível Raiz (IMPORTANTE: Não indentar) ---
+deploymentMode: SingleBinary
+
+loki:
+  auth_enabled: false
+  
+  commonConfig:
+    replication_factor: 1
+    path_prefix: /var/loki
+
+  # Armazenamento no disco local (Filesystem)
+  storage:
+    type: "filesystem"
+    filesystem:
+      chunks_directory: /var/loki/chunks
+      rules_directory: /var/loki/rules
+  
+  schemaConfig:
+    configs:
+      - from: "2024-01-01"
+        store: tsdb
+        object_store: filesystem
+        schema: v13
+        index:
+          prefix: index_
+          period: 24h
+
+# --- Configuração do Modo SingleBinary ---
+singleBinary:
+  replicas: 1
+  persistence:
+    enabled: true
+    size: ${loki_pvc_size}
+    storageClass: "local-path"
+    accessModes:
+      - ReadWriteOnce
+  
+  # Recursos leves para Mac M2
+  resources:
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+    requests:
+      cpu: 100m
+      memory: 256Mi
+
+# --- Desabilitar explicitamente componentes distribuídos ---
+# Isso garante que a validação do Chart não reclame da falta de S3
+backend:
+  replicas: 0
+read:
+  replicas: 0
+write:
+  replicas: 0
+gateway:
+  enabled: false # Usaremos o service do próprio singleBinary
+resultsCache:
+  enabled: false
+chunksCache:
+  enabled: false

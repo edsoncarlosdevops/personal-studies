@@ -1,0 +1,25 @@
+opencost:
+  exporter:
+    defaultClusterId: ${opencost_cluster_id}
+    replicas: ${opencost_replica_count}
+    resources:
+      requests:
+        cpu: "${jsondecode(opencost_resources_config).requests.cpu}"
+        memory: "${jsondecode(opencost_resources_config).requests.memory}"
+      limits:
+        cpu: "${jsondecode(opencost_resources_config).limits.cpu}"
+        memory: "${jsondecode(opencost_resources_config).limits.memory}"
+
+  # Configuração Principal: Apontar para o Prometheus existente
+  prometheus:
+    external:
+      enabled: true
+      url: ${opencost_prometheus_address}
+    internal:
+      enabled: false # Não queremos que o OpenCost suba um Prometheus dele
+
+  ui:
+    enabled: true
+    # Habilitar Ingress simples se quiser, ou usar port-forward
+    ingress:
+      enabled: false

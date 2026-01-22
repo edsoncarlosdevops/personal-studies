@@ -1,0 +1,12 @@
+replicaCount: 1
+
+resources:
+  limits:
+    cpu: 100m
+    memory: 128Mi
+  requests:
+    cpu: 10m
+    memory: 32Mi
+
+persistence:
+  enabled: false # Para lab local, persistência no alertmanager raramente é crítica
