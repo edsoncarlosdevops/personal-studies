@@ -1,0 +1,18 @@
+---
+- name: Tomando decisão baseada no output
+  hosts: localhost
+  connection: local
+  tasks:
+    - name: Rodar uptime
+      shell: "uptime"
+      register: uptime_res
+
+    - name: Avisar se o sistema acabou de subir
+      debug:
+        msg: "O servidor é novo! Está up há pouco tempo."
+      when: "'min' in uptime_res.stdout"
+
+    - name: Avisar se o servidor já está rodando há muito tempo
+      debug:
+        msg: "Servidor estável detectado."
+      when: "'days' in uptime_res.stdout or 'hours' in uptime_res.stdout"

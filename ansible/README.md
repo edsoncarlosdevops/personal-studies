@@ -32,114 +32,35 @@ docker rm -f lab-ansible
 
 ---
 
-## 💻 Playbooks Desenvolvidos no Lab
+## 📁 Estrutura de Diretórios e Playbooks
+Todos os códigos desenvolvidos durante o laboratório foram salvos na pasta `playbooks/`. 
+Nesta pasta você encontrará os seguintes cenários práticos:
 
-Como a pasta está mapeada via volume `-v $(pwd):/ansible`, todos os playbooks criados aqui aparecem magicamente dentro do container e vice-versa.
+1. **`1_teste_output.yml`**: Primeiro teste capturando a saída do comando `df -h`.
+2. **`2_meu_teste.yml`**: Teste de uptime focando em visualizar `stdout` versus o objeto JSON completo.
+3. **`3_condicionais.yml`**: Como usar o `when` para procurar por palavras-chave (`min`, `hours`) no output.
+4. **`4_read_json.yml`**: Como usar `cat` para ler um arquivo (`ultimo.json`) e o filtro `| from_json`.
+5. **`5_filtro.yml`**: Uso avançado do filtro `selectattr` do Jinja2 para iterar sobre listas de dicionários e buscar a chave `ETH/USDT`.
+6. **`6_auto_action.yml`**: Simulação completa (Auto-healing). Lê o json, filtra o BTC e executa um script de venda usando `when` dependendo da porcentagem negativa. Verifica o sucesso do comando pelo `rc` (Return Code).
+7. **`ultimo.json`**: Arquivo de testes simulando dados de um bot de trade.
 
-### 1. Captura de Output Básico (`meu_teste.yml`)
-Mostra como rodar um comando de shell, registrar sua saída completa (JSON) e mostrar um trecho específico usando `stdout`.
-
-```yaml
----
-- name: Testando captura de output
-  hosts: localhost
-  connection: local
-  tasks:
-    - name: Executar comando de uptime
-      shell: "uptime"
-      register: uptime_output
-
-    - name: Exibir apenas a linha de texto do comando
-      debug:
-        msg: "O status do servidor é: {{ uptime_output.stdout }}"
-
-    - name: Exibir o JSON completo (detalhado)
-      debug:
-        var: uptime_output
-```
-**Para rodar:** `ansible-playbook meu_teste.yml`
-
-### 2. Leitura e Manipulação de JSON (`read_json.yml`)
-Neste exemplo, simulamos a leitura de um relatório de bot de trade (`ultimo.json`) e extraímos um valor do arquivo.
-
-*Exemplo de `ultimo.json`:*
-```json
-{
-    "bot_name": "Trader_Alpha",
-    "left_open_trades": [
-        {"key": "ETH/USDT", "profit_pct": 0.29},
-        {"key": "BTC/USDT", "profit_pct": -5.00}
-    ]
-}
-```
-
-*O Playbook:*
-```yaml
----
-- name: Filtrando dados de trade
-  hosts: localhost
-  connection: local
-  tasks:
-    - name: Ler o arquivo
-      shell: "cat ultimo.json"
-      register: json_raw
-
-    - name: Criar objeto Ansible a partir do texto
-      set_fact:
-        dados: "{{ json_raw.stdout | from_json }}"
-
-    - name: Filtrar apenas o trade de ETH usando selectattr
-      set_fact:
-        trade_eth: "{{ dados.left_open_trades | selectattr('key', 'equalto', 'ETH/USDT') | list }}"
-
-    - name: Exibir resultado do filtro
-      debug:
-        msg: "O lucro atual de ETH é: {{ trade_eth[0].profit_pct }}%"
-```
-
-### 3. Automação Baseada em Condição (`auto_action.yml`)
-Vai um passo além: procura por prejuízos na lista e toma uma ação (escrever num log) apenas se a condição for atingida.
-
-```yaml
----
-- name: Automação baseada em prejuízo
-  hosts: localhost
-  connection: local
-  tasks:
-    - name: Ler dados do bot
-      shell: "cat ultimo.json"
-      register: json_raw
-
-    - name: Extrair trade de BTC de forma direta (pegando o primeiro da lista)
-      set_fact:
-        trade_btc: "{{ (json_raw.stdout | from_json).left_open_trades | selectattr('key', 'equalto', 'BTC/USDT') | list | first }}"
-
-    - name: Ação Corretiva (Vender se prejuízo)
-      shell: "echo 'ALERTA: BTC com queda de {{ trade_btc.profit_pct }}%. Vendendo...' > log_operacao.txt"
-      when: trade_btc.profit_pct < 0
-
-    - name: Verificar se o log de ação foi criado
-      shell: "ls -la log_operacao.txt"
-      register: check_file
-      ignore_errors: true
-
-    - name: Resultado da Automação
-      debug:
-        msg: "Ação tomada com sucesso! Verifique o log."
-      when: check_file.rc == 0
-```
+*(Para rodar qualquer um, acesse a pasta no terminal do docker e rode: `ansible-playbook <nome_do_arquivo>`)*
 
 ---
 
-## 🧠 Dicionário Prático de Conceitos Dominados
+## 🚀 Meu Progresso: O que já domino
+- [x] **Setup do Lab Dockerizado**: Container com volume compartilhado, mantendo meus arquivos no Mac enquanto a execução ocorre em um Linux isolado.
+- [x] **Ad-Hoc Commands**: Execução imediata no terminal via `ansible -m shell`.
+- [x] **Estrutura YAML Básica**: Conhecimento dos campos obrigatórios (`hosts`, `tasks`, `connection: local`).
+- [x] **Captura de Logs (Register)**: Usar o `register` para guardar resultados e `debug` para exibi-los.
+- [x] **Parseamento e Tratamento de JSON**: Dominado o uso de `from_json`, `selectattr` e listas no Ansible.
+- [x] **Lógica de Decisão (When)**: Controlar o fluxo do script dependendo dos resultados das variáveis (Return codes e regex em stdout).
 
-- **`connection: local`**: Diz ao Ansible para rodar comandos na própria máquina onde ele está sendo executado, ignorando conexões SSH externas.
-- **`shell:`**: Módulo do Ansible que executa comandos de terminal como se fosse um usuário digitando.
-- **`register:`**: Salva absolutamente tudo que aconteceu em uma tarefa (sucesso, falha, tempo, saída de tela) dentro de uma variável (JSON).
-- **`debug:`**: Módulo usado para "printar" informações na tela durante a execução do Playbook (muito usado para troubleshooting).
-- **`set_fact:`**: Cria uma nova variável em tempo de execução na memória do Ansible.
-- **`| from_json`**: Um filtro Jinja2 que transforma uma String crua que tem formato JSON em um objeto real que o Ansible consegue navegar.
-- **`selectattr`**: Filtro poderoso para buscar itens específicos dentro de uma lista baseada em um valor/chave.
-- **`when:`**: A condicional clássica (IF). Se o resultado for verdadeiro, a tarefa executa. Se for falso, o Ansible pula (Skip).
-- **`ignore_errors: true`**: Continua rodando o Playbook mesmo se a tarefa atual falhar (ex: um comando shell retornar erro).
-- **`rc` (Return Code)**: Código de retorno nativo do Linux. Zero `0` significa sucesso. Qualquer outro número significa erro. O Ansible captura isso automaticamente.
+---
+
+## 🎯 Checklist para os Próximos Passos (O que preciso aprender)
+- [ ] **Módulos Nativos (Idempotência)**: Substituir o módulo `shell` por módulos especialistas como `file`, `copy` e `systemd`. Entender o poder de rodar o código 100 vezes sem alterar o estado que já está correto.
+- [ ] **Loops (Laços de Repetição)**: Aprender a usar `loop` ou `with_items` para aplicar regras a várias linhas de uma lista JSON (Ex: vender todas as moedas no vermelho de uma vez).
+- [ ] **Templates (Jinja2)**: Usar o módulo `template` para gerar arquivos externos complexos (como relatórios HTML ou configurações de Nginx) baseados em variáveis.
+- [ ] **Variáveis Externas (`vars/`)**: Parar de hardcodar coisas nos playbooks e puxar de arquivos de configuração YAML externos.
+- [ ] **Roles (Organização Escalável)**: Organizar os playbooks separando tasks, vars, templates e handlers na estrutura padrão do Ansible (Ansible Galaxy).

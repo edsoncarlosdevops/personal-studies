@@ -1,0 +1,20 @@
+---
+- name: Filtrando dados de trade
+  hosts: localhost
+  connection: local
+  tasks:
+    - name: Ler o arquivo
+      shell: "cat ultimo.json"
+      register: json_raw
+
+    - name: Criar objeto
+      set_fact:
+        dados: "{{ json_raw.stdout | from_json }}"
+
+    - name: Filtrar apenas o trade de ETH
+      set_fact:
+        trade_eth: "{{ dados.left_open_trades | selectattr('key', 'equalto', 'ETH/USDT') | list }}"
+
+    - name: Exibir resultado do filtro
+      debug:
+        msg: "O lucro atual de ETH é: {{ trade_eth[0].profit_pct }}%"

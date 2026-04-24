@@ -1,0 +1,15 @@
+---
+- hosts: localhost
+  connection: local
+  tasks:
+    - name: Executando um comando shell para ver o disco
+      shell: "df -h | grep '/ansible'"
+      register: resultado_disco
+
+    - name: Mostrando apenas a saída (stdout) do comando
+      debug:
+        msg: "O espaço em disco no volume montado é: {{ resultado_disco.stdout }}"
+
+    - name: Mostrando o objeto completo para entender o que o Ansible captura
+      debug:
+        var: resultado_disco

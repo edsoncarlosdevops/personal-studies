@@ -1,0 +1,16 @@
+---
+- name: Lendo dados de um arquivo JSON
+  hosts: localhost
+  connection: local
+  tasks:
+    - name: Abrir o arquivo
+      shell: "cat ultimo.json"
+      register: json_file
+
+    - name: Transformar texto em JSON e extrair um valor
+      set_fact:
+        dados_formatados: "{{ json_file.stdout | from_json }}"
+
+    - name: Exibir um campo específico
+      debug:
+        msg: "O valor capturado é: {{ dados_formatados }}"

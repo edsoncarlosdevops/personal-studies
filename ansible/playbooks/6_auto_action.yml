@@ -1,0 +1,26 @@
+---
+- name: Automação baseada em prejuízo
+  hosts: localhost
+  connection: local
+  tasks:
+    - name: Ler dados do bot
+      shell: "cat ultimo.json"
+      register: json_raw
+
+    - name: Extrair trade de BTC
+      set_fact:
+        trade_btc: "{{ (json_raw.stdout | from_json).left_open_trades | selectattr('key', 'equalto', 'BTC/USDT') | list | first }}"
+
+    - name: Ação Corretiva
+      shell: "echo 'ALERTA: BTC com queda de {{ trade_btc.profit_pct }}%. Vendendo posição...' > log_operacao.txt"
+      when: trade_btc.profit_pct < 0
+
+    - name: Verificar se o log de ação foi criado
+      shell: "ls -la log_operacao.txt"
+      register: check_file
+      ignore_errors: true
+
+    - name: Resultado da Automação
+      debug:
+        msg: "Ação tomada com sucesso! Verifique o arquivo log_operacao.txt"
+      when: check_file.rc == 0

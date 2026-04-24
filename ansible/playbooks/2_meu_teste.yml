@@ -1,0 +1,16 @@
+---
+- name: Testando captura de output do LabEx
+  hosts: localhost
+  connection: local
+  tasks:
+    - name: Executar comando de uptime
+      shell: "uptime"
+      register: uptime_output
+
+    - name: Exibir apenas a linha de texto do comando
+      debug:
+        msg: "O status do servidor é: {{ uptime_output.stdout }}"
+
+    - name: Exibir o JSON completo (para ver o que o tutorial explica)
+      debug:
+        var: uptime_output

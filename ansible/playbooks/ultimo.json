@@ -1,0 +1,8 @@
+{
+    "bot_name": "Trader_Alpha",
+    "left_open_trades": [
+        {"key": "ETH/USDT", "profit_pct": 0.29},
+        {"key": "BTC/USDT", "profit_pct": -5.00},
+        {"key": "LTC/USDT", "profit_pct": 1.05}
+    ]
+}
