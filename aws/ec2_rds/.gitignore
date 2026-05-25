@@ -1,0 +1,6 @@
+# Ignorar diretório de módulos e providers baixados
+.terraform/
+
+# Ignorar state files (contém dados sensíveis)
+*.tfstate
+*.tfstate.*
