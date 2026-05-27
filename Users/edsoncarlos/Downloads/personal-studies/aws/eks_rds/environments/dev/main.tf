@@ -6,7 +6,7 @@ module "vpc" {
   vpc_cidr_block        = "10.0.0.0/16"
   public_subnets_cidrs  = ["10.0.1.0/24", "10.0.2.0/24"]
   private_subnets_cidrs = ["10.0.10.0/24", "10.0.20.0/24"]
-  availability_zones    = ["us-east-1a", "us-east-1b"]
+  availability_zones    = ["us-east-1a", "us-east-1c"]
 }
 
 # ---- EKS ----
@@ -21,8 +21,6 @@ module "eks" {
   node_min_size       = 1
   node_max_size       = 3
   node_instance_types = ["t3.medium"]
-  cluster_endpoint_public_access  = true
-  cluster_endpoint_private_access = true
 }
 
 # ---- RDS ----
@@ -38,7 +36,7 @@ module "rds" {
   vpc_id             = module.vpc.vpc_id
   private_subnet_ids = module.vpc.private_subnet_ids
   db_name            = "appdb"
-  db_username        = "admin"
+  db_username        = "dbadmin"
   db_password        = random_password.db_password.result
   allowed_cidr       = "10.0.0.0/16"
 }
@@ -69,3 +67,21 @@ module "bastion" {
   key_name         = aws_key_pair.bastion.key_name
   allowed_ssh_cidr = "0.0.0.0/0"
 }
+
+# ---- ARGOCD ----
+resource "random_password" "argocd_password" {
+  length  = 20
+  special = false
+}
+
+module "argocd" {
+  source = "../../modules/argocd"
+
+  environment            = "dev"
+  eks_cluster_endpoint   = module.eks.cluster_endpoint
+  eks_cluster_ca_certificate = module.eks.cluster_certificate_authority
+  eks_cluster_name       = module.eks.cluster_name
+  argocd_version         = "7.8.1"
+  admin_password         = random_password.argocd_password.result
+}
+

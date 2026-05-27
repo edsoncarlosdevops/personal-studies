@@ -67,3 +67,20 @@ module "bastion" {
   key_name         = aws_key_pair.bastion.key_name
   allowed_ssh_cidr = "0.0.0.0/0"
 }
+
+# ---- ARGOCD ----
+resource "random_password" "argocd_password" {
+  length  = 20
+  special = false
+}
+
+module "argocd" {
+  source = "../../modules/argocd"
+
+  environment                = "dev"
+  eks_cluster_endpoint       = module.eks.cluster_endpoint
+  eks_cluster_ca_certificate = module.eks.cluster_certificate_authority
+  eks_cluster_name           = module.eks.cluster_name
+  argocd_version             = "7.8.1"
+  admin_password             = random_password.argocd_password.result
+}
