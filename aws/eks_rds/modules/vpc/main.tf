@@ -11,7 +11,7 @@
 # --- VPC principal ---
 # A base de tudo. Sem ela, nada funciona.
 resource "aws_vpc" "this" {
-  cidr_block           = var.vpc_cidr
+  cidr_block           = var.vpc_cidr_block
   enable_dns_support   = true
   enable_dns_hostnames = true
 
@@ -22,9 +22,9 @@ resource "aws_vpc" "this" {
 # Onde vão: Load Balancers, Bastion, NAT Gateway
 # Têm rota direta pro Internet Gateway
 resource "aws_subnet" "public" {
-  count                   = length(var.public_subnet_cidrs)
+  count                   = length(var.public_subnets_cidrs)
   vpc_id                  = aws_vpc.this.id
-  cidr_block              = var.public_subnet_cidrs[count.index]
+  cidr_block              = var.public_subnets_cidrs[count.index]
   availability_zone       = var.availability_zones[count.index]
   map_public_ip_on_launch = true
 
@@ -35,9 +35,9 @@ resource "aws_subnet" "public" {
 # Onde vão: EKS nodes, RDS, serviços internos
 # Sem IP público, seguras, acesso internet via NAT
 resource "aws_subnet" "private" {
-  count             = length(var.private_subnet_cidrs)
+  count             = length(var.private_subnets_cidrs)
   vpc_id            = aws_vpc.this.id
-  cidr_block        = var.private_subnet_cidrs[count.index]
+  cidr_block        = var.private_subnets_cidrs[count.index]
   availability_zone = var.availability_zones[count.index]
 
   tags = { Name = "${var.environment}-private-${count.index + 1}" }
@@ -79,7 +79,7 @@ resource "aws_route" "public_internet" {
 }
 
 resource "aws_route_table_association" "public" {
-  count          = length(var.public_subnet_cidrs)
+  count          = length(var.public_subnets_cidrs)
   subnet_id      = aws_subnet.public[count.index].id
   route_table_id = aws_route_table.public.id
 }
@@ -97,7 +97,7 @@ resource "aws_route" "private_nat" {
 }
 
 resource "aws_route_table_association" "private" {
-  count          = length(var.private_subnet_cidrs)
+  count          = length(var.private_subnets_cidrs)
   subnet_id      = aws_subnet.private[count.index].id
   route_table_id = aws_route_table.private.id
 }
