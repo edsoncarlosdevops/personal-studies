@@ -34,9 +34,7 @@ resource "aws_instance" "bastion" {
   user_data = <<-EOF
     #!/bin/bash
     yum update -y
-    yum install -y postgresql15 kubectl git
-    curl -o /usr/local/bin/aws-iam-authenticator https://s3.us-west-2.amazonaws.com/amazon-eks/1.21.2/2021-07-05/bin/linux/amd64/aws-iam-authenticator
-    chmod +x /usr/local/bin/aws-iam-authenticator
+    yum install -y postgresql15 git
   EOF
 
   tags = {

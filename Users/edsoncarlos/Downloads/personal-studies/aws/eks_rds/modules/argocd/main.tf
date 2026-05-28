@@ -15,15 +15,13 @@ provider "helm" {
 
 resource "kubernetes_namespace" "argocd" {
   provider = helm.eks
-
   metadata {
     name = "argocd"
   }
 }
 
 resource "helm_release" "argocd" {
-  provider = helm.eks
-
+  provider   = helm.eks
   name       = "argocd"
   repository = "https://argoproj.github.io/argo-helm"
   chart      = "argo-cd"
@@ -45,11 +43,10 @@ resource "helm_release" "argocd" {
 
 data "kubernetes_secret" "argocd_admin" {
   provider = helm.eks
-
   metadata {
     name      = "argocd-initial-admin-secret"
     namespace = kubernetes_namespace.argocd.metadata[0].name
   }
-
   depends_on = [helm_release.argocd]
 }
+

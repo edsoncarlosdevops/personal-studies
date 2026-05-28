@@ -69,11 +69,6 @@ module "bastion" {
 }
 
 # ---- ARGOCD ----
-resource "random_password" "argocd_password" {
-  length  = 20
-  special = false
-}
-
 module "argocd" {
   source = "../../modules/argocd"
 
@@ -82,5 +77,4 @@ module "argocd" {
   eks_cluster_ca_certificate = module.eks.cluster_certificate_authority
   eks_cluster_name           = module.eks.cluster_name
   argocd_version             = "7.8.1"
-  admin_password             = random_password.argocd_password.result
 }
