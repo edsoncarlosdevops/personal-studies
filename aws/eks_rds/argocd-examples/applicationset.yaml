@@ -19,7 +19,7 @@ spec:
       source:
         repoURL: https://github.com/edsoncarlosdevops/personal-studies.git
         targetRevision: HEAD
-        path: aws/eks_rds/argocd-examples/apps
+        path: "aws/eks_rds/argocd-examples/apps/{{cluster}}"
       destination:
         server: "{{url}}"
         namespace: "guestbook-{{cluster}}"
