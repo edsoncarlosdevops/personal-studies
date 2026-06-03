@@ -223,9 +223,39 @@ After running `terraform apply`, retrieve the deployment credentials and connect
 
 ### Active Directory Assets
 - **OU**: `OU=LabUsers,DC=lab,DC=local`
-- **Lab Users**: `user1@lab.local` through `userN@lab.local` (configurable count via `users_count` variable).
-- **Password**: `P@ssw0rd123!` (standardized for lab purposes).
+- **Quantity**: Defined by `users_count` variable in `environments/dev/variables.tf` (default: `10` users).
+- **Naming convention**: `user1@lab.local` through `userN@lab.local`
+- **Temporary Password**: `P@ssw0rd123!` — users are **forced to redefine password at first logon** (security best practice).
 - **Groups**: `Domain Users` and `Remote Desktop Users`.
+
+### Workstations Configuration
+- **Quantity**: Defined by `workstation_count` variable in `environments/dev/variables.tf` (default: `3` workstations).
+- **Instance Type**: Defined by `workstation_instance_type` variable (default: `t3.medium`) — 2 vCPU, 4GB RAM.
+- **Hostname**: Auto-generated as `WORKSTATION-01`, `WORKSTATION-02`, etc. (via `hostname` variable in module).
+- **Domain Join**: Automatically joined to `lab.local` domain via Ansible baseline playbook.
+
+### Software Installed on Workstations (via Ansible)
+
+| Software | Purpose | Installed By |
+|---|---|---|
+| **Windows Updates** | Latest security patches | `01-baseline.yml` |
+| **LAPS** | Local admin password rotation (30 days) | `02-security-hardening.yml` |
+| **Windows Defender ASR** | Attack Surface Reduction rules | `02-security-hardening.yml` |
+| **CIS Benchmark L1** | Security compliance hardening | `02-security-hardening.yml` |
+| **Prometheus Exporter** | OS metrics collection (port 9182) | `03-monitoring.yml` |
+| **Prometheus Server** | Metrics storage and query (port 9090) | `03-monitoring.yml` |
+| **Grafana** | Dashboards and visualization (port 3000) | `03-monitoring.yml` |
+| **Azure Arc Agent** | Hybrid cloud management (optional) | `04-azure-arc.yml` |
+
+### Available Lab Resources Summary
+
+| Resource | How to Access |
+|---|---|
+| **Domain Controller (RDP)** | `mstsc /v:<dc_public_ip>` — user: `.\Administrator` |
+| **Workstations (RDP)** | Via DC or direct RDP to workstation IPs |
+| **Prometheus Metrics** | `http://<workstation_ip>:9090` |
+| **Grafana Dashboards** | `http://<workstation_ip>:3000` (admin:admin) |
+| **Lab Users Report** | Downloaded as artifact from GitHub Actions (`lab-users-report`) |
 
 ### Ansible Playbooks Summary
 

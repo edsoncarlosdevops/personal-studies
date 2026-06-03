@@ -147,7 +147,7 @@ Após executar `terraform apply`, recupere as credenciais e parâmetros de conex
 
 ### 3. Contas de Domínio do Lab (Usuários Padrão)
 - **Usuários**: `user1@lab.local` até `userN@lab.local` (ou `LAB\userN`)
-- **Senha**: `P@ssw0rd123!`
+- **Senha Temporária**: `P@ssw0rd123!` (usuários **DEVEM redefinir a senha no primeiro login** — configurado via `-ChangePasswordAtLogon $true`)
 - **Privilégio**: Usuários padrão do domínio, membros de `Domain Users` e `Remote Desktop Users`.
 
 ### 4. Acesso ao Monitoramento
@@ -222,9 +222,39 @@ Após executar `terraform apply`, recupere as credenciais e parâmetros de conex
 
 ### Recursos do Active Directory
 - **OU**: `OU=LabUsers,DC=lab,DC=local`
-- **Usuários do Lab**: `user1@lab.local` até `userN@lab.local` (quantidade configurável via variável `users_count`).
-- **Senha**: `P@ssw0rd123!` (padronizada para fins de laboratório).
+- **Quantidade**: Definida pela variável `users_count` em `environments/dev/variables.tf` (padrão: `10` usuários).
+- **Nomenclatura**: `user1@lab.local` até `userN@lab.local`
+- **Senha Temporária**: `P@ssw0rd123!` — usuários **devem redefinir a senha no primeiro login** (boa prática de segurança).
 - **Grupos**: `Domain Users` e `Remote Desktop Users`.
+
+### Configuração das Workstations
+- **Quantidade**: Definida pela variável `workstation_count` em `environments/dev/variables.tf` (padrão: `3` workstations).
+- **Tipo de Instância**: Definido pela variável `workstation_instance_type` (padrão: `t3.medium`) — 2 vCPU, 4GB RAM.
+- **Hostname**: Gerado automaticamente como `WORKSTATION-01`, `WORKSTATION-02`, etc. (via variável `hostname` no módulo).
+- **Domain Join**: Automaticamente associadas ao domínio `lab.local` via playbook Ansible.
+
+### Software Instalado nas Workstations (via Ansible)
+
+| Software | Finalidade | Instalado Por |
+|---|---|---|
+| **Windows Updates** | Patches de segurança mais recentes | `01-baseline.yml` |
+| **LAPS** | Rotação de senha do admin local (30 dias) | `02-security-hardening.yml` |
+| **Windows Defender ASR** | Regras de redução de superfície de ataque | `02-security-hardening.yml` |
+| **CIS Benchmark L1** | Hardening de conformidade de segurança | `02-security-hardening.yml` |
+| **Prometheus Exporter** | Coleta de métricas do SO (porta 9182) | `03-monitoring.yml` |
+| **Prometheus Server** | Armazenamento e consulta de métricas (porta 9090) | `03-monitoring.yml` |
+| **Grafana** | Dashboards e visualização (porta 3000) | `03-monitoring.yml` |
+| **Azure Arc Agent** | Gerenciamento híbrido em nuvem (opcional) | `04-azure-arc.yml` |
+
+### Sumário de Recursos Disponíveis no Lab
+
+| Recurso | Como Acessar |
+|---|---|
+| **Domain Controller (RDP)** | `mstsc /v:<ip_dc>` — usuário: `.\\Administrator` |
+| **Workstations (RDP)** | Via DC ou RDP direto para IPs das workstations |
+| **Prometheus Metrics** | `http://<ip_workstation>:9090` |
+| **Grafana Dashboards** | `http://<ip_workstation>:3000` (admin:admin) |
+| **Relatório de Usuários** | Baixado como artefato do GitHub Actions (`lab-users-report`)
 
 ### Resumo dos Playbooks Ansible
 
