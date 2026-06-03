@@ -73,13 +73,15 @@ resource "local_file" "windows_admin_pem" {
 module "windows_server" {
   source = "../../modules/windows-server"
 
-  environment        = "dev"
-  subnet_id          = module.vpc.public_subnet_id
-  security_group_id  = module.security_group.security_group_id
-  admin_password     = random_password.admin.result
-  safe_mode_password = random_password.safe_mode.result
-  instance_type      = "t3.large"
-  key_name           = aws_key_pair.windows_admin.key_name
+  environment           = "dev"
+  subnet_id             = module.vpc.public_subnet_id
+  security_group_id     = module.security_group.security_group_id
+  admin_password        = random_password.admin.result
+  safe_mode_password    = random_password.safe_mode.result
+  instance_type         = "t3.large"
+  key_name              = aws_key_pair.windows_admin.key_name
+  is_domain_controller  = true
+  hostname              = "DC-01"
 }
 
 # ---- Windows Workstations (count-based) ----
@@ -87,14 +89,15 @@ module "windows_workstation" {
   source = "../../modules/windows-server"
   count  = var.workstation_count
 
-  environment        = "dev"
-  subnet_id          = module.vpc.public_subnet_id
-  security_group_id  = module.security_group.security_group_id
-  admin_password     = random_password.admin.result
-  safe_mode_password = random_password.safe_mode.result
-  instance_type      = var.workstation_instance_type
-  key_name           = aws_key_pair.windows_admin.key_name
-  hostname           = "WORKSTATION-${format("%02d", count.index + 1)}"
+  environment           = "dev"
+  subnet_id             = module.vpc.public_subnet_id
+  security_group_id     = module.security_group.security_group_id
+  admin_password        = random_password.admin.result
+  safe_mode_password    = random_password.safe_mode.result
+  instance_type         = var.workstation_instance_type
+  key_name              = aws_key_pair.windows_admin.key_name
+  hostname              = "WORKSTATION-${format("%02d", count.index + 1)}"
+  is_domain_controller  = false
 }
 
 # ---- Generate Ansible Inventory Automatically ----

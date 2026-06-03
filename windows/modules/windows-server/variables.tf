@@ -43,3 +43,9 @@ variable "hostname" {
   default     = null
 }
 
+
+variable "is_domain_controller" {
+  description = "Whether this instance is the Domain Controller (installs AD DS) or a workstation"
+  type        = bool
+  default     = false
+}

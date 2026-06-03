@@ -33,14 +33,16 @@ resource "aws_instance" "windows" {
     encrypted = true
   }
 
-  # Longer timeout for Windows boot and AD configuration
+  # Conditional timeout: DC takes longer (AD promotion ~20min), workstations are faster
   timeouts {
-    create = "15m"
-    update = "15m"
+    create = var.is_domain_controller ? "30m" : "15m"
+    update = var.is_domain_controller ? "30m" : "15m"
     delete = "15m"
   }
 
-  user_data = <<-EOF
+  # Conditional userdata: DC promotes AD, workstations just configure basics
+  user_data = var.is_domain_controller ? (
+    <<-EOF
     <powershell>
     $ErrorActionPreference = 'Stop'
     $logFile = 'C:\Logs\userdata.log'
@@ -61,25 +63,16 @@ resource "aws_instance" "windows" {
         $password = ConvertTo-SecureString "${var.admin_password}" -AsPlainText -Force
         Set-LocalUser -Name Administrator -Password $password
 
-        Write-Host "=== Configuring Firewall rules (specific ports only) ==="
-        # Allow RDP (3389)
+        Write-Host "=== Configuring Firewall rules ==="
         netsh advfirewall firewall add rule name="RDP (3389)" dir=in action=allow protocol=tcp localport=3389
-        # Allow WinRM HTTP (5985)
         netsh advfirewall firewall add rule name="WinRM HTTP (5985)" dir=in action=allow protocol=tcp localport=5985
-        # Allow WinRM HTTPS (5986)
         netsh advfirewall firewall add rule name="WinRM HTTPS (5986)" dir=in action=allow protocol=tcp localport=5986
-        # Allow DNS (53) - required for AD
         netsh advfirewall firewall add rule name="DNS (53)" dir=in action=allow protocol=udp localport=53
-        # Allow Kerberos (88) - required for AD
         netsh advfirewall firewall add rule name="Kerberos (88)" dir=in action=allow protocol=tcp localport=88
         netsh advfirewall firewall add rule name="Kerberos (88) UDP" dir=in action=allow protocol=udp localport=88
-        # Allow LDAP (389) - required for AD
         netsh advfirewall firewall add rule name="LDAP (389)" dir=in action=allow protocol=tcp localport=389
-        # Allow LDAP SSL (636)
         netsh advfirewall firewall add rule name="LDAP SSL (636)" dir=in action=allow protocol=tcp localport=636
-        # Allow SMB (445) - required for AD replication
         netsh advfirewall firewall add rule name="SMB (445)" dir=in action=allow protocol=tcp localport=445
-        # Allow ICMPv4 (ping) for testing
         netsh advfirewall firewall add rule name="ICMPv4 (ping)" dir=in action=allow protocol=icmpv4
 
         Write-Host "=== Configuring WinRM ==="
@@ -111,7 +104,55 @@ ${file("${path.module}/../../scripts/configure-ad.ps1")}
         Stop-Transcript
     }
     </powershell>
-  EOF
+    EOF
+  ) : (
+    <<-EOF
+    <powershell>
+    $ErrorActionPreference = 'Stop'
+    $logFile = 'C:\Logs\userdata.log'
+
+    Start-Transcript -Path $logFile -Append
+
+    try {
+        Write-Host "=== Setting hostname ==="
+        Rename-Computer -NewName "${var.hostname}" -Force
+
+        Write-Host "=== Creating directories ==="
+        New-Item -ItemType Directory -Force -Path 'C:\Scripts' | Out-Null
+        New-Item -ItemType Directory -Force -Path 'C:\Logs' | Out-Null
+
+        Write-Host "=== Setting Administrator password ==="
+        $password = ConvertTo-SecureString "${var.admin_password}" -AsPlainText -Force
+        Set-LocalUser -Name Administrator -Password $password
+
+        Write-Host "=== Configuring Firewall rules ==="
+        netsh advfirewall firewall add rule name="RDP (3389)" dir=in action=allow protocol=tcp localport=3389
+        netsh advfirewall firewall add rule name="WinRM HTTP (5985)" dir=in action=allow protocol=tcp localport=5985
+        netsh advfirewall firewall add rule name="WinRM HTTPS (5986)" dir=in action=allow protocol=tcp localport=5986
+        netsh advfirewall firewall add rule name="ICMPv4 (ping)" dir=in action=allow protocol=icmpv4
+
+        Write-Host "=== Configuring WinRM ==="
+        winrm set winrm/config/service/auth '@{Basic="true"}'
+        winrm set winrm/config/service '@{AllowUnencrypted="true"}'
+        winrm set winrm/config/winrs '@{MaxMemoryPerShellMB="2048"}'
+
+        Write-Host "=== Enabling RDP ==="
+        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name 'fDenyTSConnections' -Value 0
+        Enable-NetFirewallRule -DisplayGroup 'Remote Desktop'
+
+        Write-Host "=== Workstation initialization completed ==="
+    }
+    catch {
+        Write-Host "=== ERROR: $_ ===" -ForegroundColor Red
+        $_ | Out-File -FilePath 'C:\Logs\userdata-error.log' -Append
+    }
+    finally {
+        Write-Host "=== Userdata completed ==="
+        Stop-Transcript
+    }
+    </powershell>
+    EOF
+  )
 
   tags = {
     Name        = var.hostname != null ? var.hostname : "${var.environment}-windows-server"
@@ -120,4 +161,3 @@ ${file("${path.module}/../../scripts/configure-ad.ps1")}
     Project     = "windows-ad-terraform"
   }
 }
-

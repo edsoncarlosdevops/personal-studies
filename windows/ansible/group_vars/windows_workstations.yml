@@ -1,11 +1,7 @@
 ---
 # Windows Workstations - Common Connection Variables
-ansible_user: Administrator
-ansible_password: "{{ admin_password }}"
-ansible_connection: winrm
-ansible_winrm_transport: basic
-ansible_winrm_server_cert_validation: ignore
-ansible_port: 5985
+# Connection details are now defined in the auto-generated inventory (inventory/dev.yml)
+# This file contains only additional non-credential variables.
 
 # WinRM performance tuning
 ansible_winrm_operation_timeout_sec: 120

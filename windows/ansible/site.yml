@@ -3,8 +3,12 @@
 # Windows Lab - Full Orchestration Playbook
 # ============================================================
 # Usage:
-#   ansible-playbook site.yml                  # Full setup
-#   ansible-playbook site.yml --tags security  # Only security
+#   ansible-playbook site.yml                     # Full setup
+#   ansible-playbook site.yml --tags security     # Only security
+#   ansible-playbook site.yml --skip-tags monitoring  # Skip monitoring
+#
+# Note: Run 'terraform apply' first to generate
+# the inventory file (ansible/inventory/dev.yml)
 # ============================================================
 
 - name: "Phase 1/3 - Baseline Configuration"
