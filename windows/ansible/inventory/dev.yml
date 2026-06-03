@@ -1,0 +1,11 @@
+---
+all:
+  children:
+    windows_workstations:
+      hosts:
+        WORKSTATION-01:
+          ansible_host: <PUBLIC_IP_01>
+        WORKSTATION-02:
+          ansible_host: <PUBLIC_IP_02>
+        WORKSTATION-03:
+          ansible_host: <PUBLIC_IP_03>

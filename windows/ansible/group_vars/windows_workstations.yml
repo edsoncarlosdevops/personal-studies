@@ -1,0 +1,12 @@
+---
+# Windows Workstations - Common Connection Variables
+ansible_user: Administrator
+ansible_password: "{{ admin_password }}"
+ansible_connection: winrm
+ansible_winrm_transport: basic
+ansible_winrm_server_cert_validation: ignore
+ansible_port: 5985
+
+# WinRM performance tuning
+ansible_winrm_operation_timeout_sec: 120
+ansible_winrm_read_timeout_sec: 150

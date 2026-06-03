@@ -1,0 +1,207 @@
+---
+- name: Windows Security Hardening
+  hosts: windows_workstations
+  gather_facts: yes
+  vars:
+    laps_admin_account: "svc_laps"
+    laps_admin_password: "P@ssw0rd123!"
+
+  tasks:
+    # ============================================================
+    # 1. WINDOWS DEFENDER HARDENING
+    # ============================================================
+    - name: Ensure Windows Defender is enabled
+      ansible.windows.win_shell: |
+        Set-MpPreference -DisableRealtimeMonitoring $false
+        Set-MpPreference -PUAProtection Enabled
+        Set-MpPreference -CloudBlockLevel High
+        Set-MpPreference -CloudTimeout 50
+        Set-MpPreference -SubmitSamplesConsent Always
+      tags: defender
+
+    - name: Enable Defender Attack Surface Reduction (ASR) rules
+      ansible.windows.win_shell: |
+        $rules = @{
+            "75668c1f-73b5-4cf0-bb93-3ecf5cb7cc84" = 1  # Block Office apps from creating child processes
+            "3b576869-a4ec-4529-8536-b80a7769e899" = 1  # Block Office apps from creating executable content
+            "d4f940ab-401b-4efc-aadc-ad5f3c50688a" = 1  # Block Office apps from launching child processes
+            "9e6c4e1f-7d60-472f-ba1a-a39ef669e4b2" = 1  # Block credential theft from Windows LSA
+            "be9ba2d9-53ea-4cdc-84e5-9b1eeee46550" = 1  # Block executable content from email
+        }
+        
+        foreach ($rule in $rules.GetEnumerator()) {
+            Add-MpPreference -AttackSurfaceReductionRules_Ids $rule.Key `
+                -AttackSurfaceReductionRules_Actions Enabled
+        }
+      tags: defender
+
+    - name: Schedule daily Defender scan
+      ansible.windows.win_shell: |
+        Set-MpPreference -ScanScheduleDay 7  # Sunday
+        Set-MpPreference -ScanScheduleTime 02:00
+        Set-MpPreference -QuickScanInterval 24
+      tags: defender
+
+    # ============================================================
+    # 2. LAPS (LOCAL ADMINISTRATOR PASSWORD SOLUTION)
+    # ============================================================
+    - name: Install LAPS
+      ansible.windows.win_shell: |
+        $lapsUrl = "https://download.microsoft.com/download/6/7/7/6772CB21-6B20-436B-B06D-19C064A0CC75/LAPS.x64.msi"
+        $lapsMsi = "C:\Tools\LAPS.x64.msi"
+        
+        Invoke-WebRequest -Uri $lapsUrl -OutFile $lapsMsi -UseBasicParsing
+        Start-Process msiexec.exe -Wait -ArgumentList "/i $lapsMsi /qn /norestart"
+      tags: laps
+
+    - name: Configure LAPS policy
+      ansible.windows.win_shell: |
+        # Configure LAPS registry settings
+        $regPath = "HKLM:\Software\Policies\Microsoft Services\AdmPwd"
+        New-Item -Path $regPath -Force | Out-Null
+        
+        Set-ItemProperty -Path $regPath -Name "AdmPwdEnabled" -Value 1 -Type DWord
+        Set-ItemProperty -Path $regPath -Name "PasswordLength" -Value 16 -Type DWord
+        Set-ItemProperty -Path $regPath -Name "PasswordAgeDays" -Value 30 -Type DWord
+        Set-ItemProperty -Path $regPath -Name "PasswordComplexity" -Value 4 -Type DWord  # 4 = Large letters + Small letters + Numbers + Special
+      tags: laps
+
+    # ============================================================
+    # 3. CIS BENCHMARK LEVEL 1 (KEY SETTINGS)
+    # ============================================================
+    - name: Disable SMBv1 protocol (security risk)
+      ansible.windows.win_shell: |
+        Set-SmbServerConfiguration -EnableSMB1Protocol $false -Force
+        Disable-WindowsOptionalFeature -Online -FeatureName "SMB1Protocol" -NoRestart
+      tags: cis
+
+    - name: Enable Windows Firewall logging
+      ansible.windows.win_shell: |
+        netsh advfirewall set allprofiles logging filename %systemroot%\system32\LogFiles\Firewall\pfirewall.log
+        netsh advfirewall set allprofiles logging maxfilesize 16384
+        netsh advfirewall set allprofiles logging droppedconnections enable
+        netsh advfirewall set allprofiles logging allowedconnections enable
+      tags: cis
+
+    - name: Disable LLMNR (mDNS) - prevents spoofing attacks
+      ansible.windows.win_regedit:
+        path: HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\DNSClient
+        name: EnableMulticast
+        data: 0
+        type: dword
+        state: present
+      tags: cis
+
+    - name: Disable WPAD (Web Proxy Auto-Discovery)
+      ansible.windows.win_regedit:
+        path: HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Internet Settings\Wpad
+        name: WpadEnabled
+        data: 0
+        type: dword
+        state: present
+      tags: cis
+
+    - name: Enforce strong NTLMv2 only (disable LM and NTLMv1)
+      ansible.windows.win_regedit:
+        path: HKLM:\SYSTEM\CurrentControlSet\Control\Lsa
+        name: LmCompatibilityLevel
+        data: 5
+        type: dword
+        state: present
+      tags: cis
+
+    # ============================================================
+    # 4. AUDIT POLICY
+    # ============================================================
+    - name: Enable advanced audit policies
+      ansible.windows.win_shell: |
+        # Logon/Logoff
+        auditpol /set /subcategory:"Logon" /success:enable /failure:enable
+        auditpol /set /subcategory:"Logoff" /success:enable /failure:enable
+        auditpol /set /subcategory:"Account Lockout" /success:enable /failure:enable
+        
+        # Account Management
+        auditpol /set /subcategory:"User Account Management" /success:enable /failure:enable
+        auditpol /set /subcategory:"Computer Account Management" /success:enable /failure:enable
+        auditpol /set /subcategory:"Security Group Management" /success:enable /failure:enable
+        
+        # Object Access
+        auditpol /set /subcategory:"File System" /success:enable /failure:enable
+        auditpol /set /subcategory:"Registry" /success:enable /failure:enable
+        
+        # Policy Change
+        auditpol /set /subcategory:"Audit Policy Change" /success:enable /failure:enable
+        
+        # Privilege Use
+        auditpol /set /subcategory:"Sensitive Privilege Use" /success:enable /failure:enable
+        
+        # System
+        auditpol /set /subcategory:"Security State Change" /success:enable /failure:enable
+        auditpol /set /subcategory:"Security System Extension" /success:enable /failure:enable
+        auditpol /set /subcategory:"System Integrity" /success:enable /failure:enable
+      tags: audit
+
+    # ============================================================
+    # 5. ADDITIONAL HARDENING
+    # ============================================================
+    - name: Disable PowerShell v2 (deprecated and less secure)
+      ansible.windows.win_shell: |
+        Disable-WindowsOptionalFeature -Online -FeatureName "MicrosoftWindowsPowerShellV2Root" -NoRestart
+      tags: hardening
+
+    - name: Restrict Anonymous access
+      ansible.windows.win_regedit:
+        path: HKLM:\SYSTEM\CurrentControlSet\Control\Lsa
+        name: RestrictAnonymous
+        data: 1
+        type: dword
+        state: present
+      tags: hardening
+
+    - name: Enable Ctrl+Alt+Del for secure desktop
+      ansible.windows.win_regedit:
+        path: HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System
+        name: DisableCAD
+        data: 0
+        type: dword
+        state: present
+      tags: hardening
+
+    - name: Set maximum password age to 90 days
+      ansible.windows.win_shell: |
+        net accounts /maxpwage:90
+      tags: hardening
+
+    - name: Enable User Account Control (UAC)
+      ansible.windows.win_regedit:
+        path: HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System
+        name: EnableLUA
+        data: 1
+        type: dword
+        state: present
+      tags: hardening
+
+    # ============================================================
+    # 6. VERIFICATION
+    # ============================================================
+    - name: Generate security report
+      ansible.windows.win_shell: |
+        $report = [PSCustomObject]@{
+            Hostname        = $env:COMPUTERNAME
+            Defender        = (Get-MpPreference).DisableRealtimeMonitoring -eq $false
+            LAPS            = Test-Path "C:\Program Files\LAPS"
+            SMBv1           = (Get-SmbServerConfiguration).EnableSMB1Protocol -eq $false
+            UAC             = (Get-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" -Name "EnableLUA").EnableLUA -eq 1
+            NTLMv2          = (Get-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Lsa" -Name "LmCompatibilityLevel").LmCompatibilityLevel -eq 5
+            PowerShell_v2   = (Get-WindowsOptionalFeature -Online -FeatureName "MicrosoftWindowsPowerShellV2Root").State -eq "Disabled"
+            Firewall        = (Get-NetFirewallProfile -Profile Domain).Enabled -eq $true
+            LastAuditPolicy = "Configured"
+        }
+        $report | ConvertTo-Json
+      register: security_report
+      tags: verify
+
+    - name: Display security report
+      debug:
+        msg: "{{ security_report.stdout }}"
+      tags: verify

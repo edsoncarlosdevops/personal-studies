@@ -1,0 +1,241 @@
+---
+- name: Azure Arc Hybrid Management Setup
+  hosts: windows_workstations
+  gather_facts: yes
+  vars:
+    # IMPORTANT: Set these via --extra-vars or vault
+    azure_location: "eastus"
+    azure_resource_group: "rg-windows-lab"
+    azure_tenant_id: "{{ vault_azure_tenant_id }}"
+    azure_service_principal_id: "{{ vault_azure_sp_id }}"
+    azure_service_principal_secret: "{{ vault_azure_sp_secret }}"
+    azure_subscription_id: "{{ vault_azure_subscription_id }}"
+
+  tasks:
+    # ============================================================
+    # 1. PREREQUISITES CHECK
+    # ============================================================
+    - name: Check if Azure Arc agent is already installed
+      ansible.windows.win_shell: |
+        $installed = Get-ItemProperty -Path "HKLM:\Software\Microsoft\AzureArc" -ErrorAction SilentlyContinue
+        if ($installed) {
+            $version = $installed.Version
+            $status = "installed"
+        } else {
+            $version = $null
+            $status = "not_installed"
+        }
+        [PSCustomObject]@{
+            Status = $status
+            Version = $version
+        } | ConvertTo-Json
+      register: arc_status
+      tags: check
+
+    - name: Display current Arc status
+      debug:
+        msg: "Azure Arc Agent: {{ arc_status.stdout }}"
+      tags: check
+
+    # ============================================================
+    # 2. INSTALL AZURE CONNECTED MACHINE AGENT
+    # ============================================================
+    - name: Download Azure Connected Machine Agent
+      ansible.windows.win_shell: |
+        $url = "https://aka.ms/AzureConnectedMachineAgent"
+        $output = "C:\Tools\AzureConnectedMachineAgent.msi"
+        
+        [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+        Invoke-WebRequest -Uri $url -OutFile $output -UseBasicParsing
+        
+        Write-Host "Azure Arc agent downloaded" -ForegroundColor Green
+      tags: install
+      when: arc_status.stdout is search('not_installed')
+
+    - name: Install Azure Connected Machine Agent
+      ansible.windows.win_shell: |
+        $msiPath = "C:\Tools\AzureConnectedMachineAgent.msi"
+        
+        $args = @(
+            "/i", $msiPath,
+            "/qn",
+            "/norestart",
+            "TENANT_ID={{ azure_tenant_id }}",
+            "SUBSCRIPTION_ID={{ azure_subscription_id }}",
+            "RESOURCE_GROUP={{ azure_resource_group }}",
+            "LOCATION={{ azure_location }}"
+        )
+        
+        Start-Process msiexec.exe -Wait -ArgumentList ($args -join " ")
+        
+        # Wait for installation to complete
+        Start-Sleep -Seconds 15
+        
+        # Verify installation
+        $agentPath = "$env:ProgramFiles\AzureConnectedMachineAgent"
+        if (Test-Path $agentPath) {
+            Write-Host "Azure Arc agent installed successfully" -ForegroundColor Green
+        } else {
+            Write-Host "Azure Arc agent installation may have failed" -ForegroundColor Red
+            exit 1
+        }
+      tags: install
+      when: arc_status.stdout is search('not_installed')
+
+    # ============================================================
+    # 3. CONNECT TO AZURE ARC
+    # ============================================================
+    - name: Connect machine to Azure Arc
+      ansible.windows.win_shell: |
+        $agentPath = "$env:ProgramFiles\AzureConnectedMachineAgent\azcmagent.exe"
+        
+        $args = @(
+            "connect",
+            "--service-principal-id", "{{ azure_service_principal_id }}",
+            "--service-principal-secret", "{{ azure_service_principal_secret }}",
+            "--resource-group", "{{ azure_resource_group }}",
+            "--tenant-id", "{{ azure_tenant_id }}",
+            "--location", "{{ azure_location }}",
+            "--subscription-id", "{{ azure_subscription_id }}",
+            "--tags", "Environment=dev,ManagedBy=ansible,Hostname=$env:COMPUTERNAME"
+        )
+        
+        & $agentPath $args
+        
+        if ($LASTEXITCODE -eq 0) {
+            Write-Host "Machine connected to Azure Arc successfully" -ForegroundColor Green
+            
+            # Display connection info
+            $info = & $agentPath show
+            Write-Host "Connection Info: $info" -ForegroundColor Cyan
+        } else {
+            Write-Host "Failed to connect to Azure Arc (exit code: $LASTEXITCODE)" -ForegroundColor Red
+            exit $LASTEXITCODE
+        }
+      tags: connect
+      when: arc_status.stdout is search('not_installed')
+
+    # ============================================================
+    # 4. ENABLE AZURE EXTENSIONS
+    # ============================================================
+    - name: Enable Microsoft Defender for Cloud
+      ansible.windows.win_shell: |
+        $agentPath = "$env:ProgramFiles\AzureConnectedMachineAgent\azcmagent.exe"
+        
+        # Install MMA (Microsoft Monitoring Agent) extension for Defender
+        $extensionArgs = @(
+            "extension", "install",
+            "--extension-name", "MicrosoftMonitoringAgent",
+            "--publisher", "Microsoft.EnterpriseCloud.Monitoring",
+            "--type-handler-version", "1.0",
+            "--auto-upgrade", "minor"
+        )
+        
+        & $agentPath $extensionArgs
+        
+        Write-Host "Microsoft Defender for Cloud extension enabled" -ForegroundColor Green
+      tags: defender_ext
+      ignore_errors: yes
+
+    - name: Enable Azure Update Management
+      ansible.windows.win_shell: |
+        $agentPath = "$env:ProgramFiles\AzureConnectedMachineAgent\azcmagent.exe"
+        
+        # Enable Guest Configuration extension for Update Management
+        $extensionArgs = @(
+            "extension", "install",
+            "--extension-name", "AzureSecurityLinuxAgent",  # Also works for Windows
+            "--publisher", "Microsoft.Azure.Security.Monitoring",
+            "--type-handler-version", "2.0",
+            "--auto-upgrade", "minor"
+        )
+        
+        & $agentPath $extensionArgs
+        
+        Write-Host "Azure Update Management extension enabled" -ForegroundColor Green
+      tags: update_ext
+      ignore_errors: yes
+
+    # ============================================================
+    # 5. AZURE POLICY COMPLIANCE
+    # ============================================================
+    - name: Enable Azure Policy Guest Configuration
+      ansible.windows.win_shell: |
+        $agentPath = "$env:ProgramFiles\AzureConnectedMachineAgent\azcmagent.exe"
+        
+        # Install Guest Configuration extension
+        $extensionArgs = @(
+            "extension", "install",
+            "--extension-name", "AzurePolicy-forWindows",
+            "--publisher", "Microsoft.GuestConfiguration",
+            "--type-handler-version", "1.0",
+            "--auto-upgrade", "minor"
+        )
+        
+        & $agentPath $extensionArgs
+        
+        Write-Host "Azure Policy Guest Configuration extension enabled" -ForegroundColor Green
+        
+        # Verify compliance
+        $configPath = "C:\ProgramData\GuestConfig\extension.log"
+        if (Test-Path $configPath) {
+            Write-Host "Guest Config agent running and collecting compliance data" -ForegroundColor Cyan
+        }
+      tags: policy_ext
+      ignore_errors: yes
+
+    # ============================================================
+    # 6. VERIFICATION
+    # ============================================================
+    - name: Verify Azure Arc connection
+      ansible.windows.win_shell: |
+        $agentPath = "$env:ProgramFiles\AzureConnectedMachineAgent\azcmagent.exe"
+        
+        $status = & $agentPath show
+        
+        # Parse key information
+        $connected = $status -match "Status:\s*Connected"
+        $machineName = if ($status -match "Machine Name:\s*(\S+)") { $matches[1] } else { "Unknown" }
+        $resourceGroup = if ($status -match "Resource Group:\s*(\S+)") { $matches[1] } else { "Unknown" }
+        
+        [PSCustomObject]@{
+            Hostname = $env:COMPUTERNAME
+            AzureArcStatus = if ($connected) { "Connected" } else { "Disconnected" }
+            MachineName = $machineName
+            ResourceGroup = $resourceGroup
+            Location = "{{ azure_location }}"
+            Extensions = @(
+                "MicrosoftMonitoringAgent",
+                "AzurePolicy-forWindows"
+            )
+        } | ConvertTo-Json
+      register: arc_verification
+      tags: verify
+
+    - name: Display Azure Arc status
+      debug:
+        msg: "{{ arc_verification.stdout }}"
+      tags: verify
+
+    # ============================================================
+    # 7. DISCONNECT (CLEANUP) - USED FOR DESTROY
+    # ============================================================
+    - name: Disconnect from Azure Arc (use with --tags disconnect)
+      ansible.windows.win_shell: |
+        $agentPath = "$env:ProgramFiles\AzureConnectedMachineAgent\azcmagent.exe"
+        
+        # Disconnect from Azure
+        & $agentPath disconnect --force
+        
+        if ($LASTEXITCODE -eq 0) {
+            Write-Host "Machine disconnected from Azure Arc" -ForegroundColor Yellow
+            
+            # Uninstall agent
+            $msiPath = "C:\Tools\AzureConnectedMachineAgent.msi"
+            if (Test-Path $msiPath) {
+                Start-Process msiexec.exe -Wait -ArgumentList "/x $msiPath /qn /norestart"
+                Write-Host "Azure Arc agent uninstalled" -ForegroundColor Yellow
+            }
+        }
+      tags: disconnect
+      when: False  # Only run when explicitly called with --tags disconnect

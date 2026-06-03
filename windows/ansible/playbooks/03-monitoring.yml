@@ -1,0 +1,317 @@
+---
+- name: Windows Monitoring Setup
+  hosts: windows_workstations
+  gather_facts: yes
+  vars:
+    prometheus_version: "0.24.0"
+    node_exporter_port: 9182
+    grafana_admin_password: "GrafanaP@ss123!"
+
+  tasks:
+    # ============================================================
+    # 1. PROMETHEUS WINDOWS EXPORTER
+    # ============================================================
+    - name: Create monitoring directory
+      ansible.windows.win_file:
+        path: C:\Monitoring
+        state: directory
+
+    - name: Download Prometheus Windows Exporter
+      ansible.windows.win_shell: |
+        $url = "https://github.com/prometheus-community/windows_exporter/releases/download/v{{ prometheus_version }}/windows_exporter-{{ prometheus_version }}-amd64.msi"
+        $output = "C:\Monitoring\windows_exporter.msi"
+        
+        [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+        Invoke-WebRequest -Uri $url -OutFile $output -UseBasicParsing
+        
+        Write-Host "Downloaded windows_exporter.msi" -ForegroundColor Green
+      tags: prometheus
+
+    - name: Install Prometheus Windows Exporter
+      ansible.windows.win_shell: |
+        $msiPath = "C:\Monitoring\windows_exporter.msi"
+        
+        # Install with custom port and collectors
+        $args = @(
+            "/i", $msiPath,
+            "/qn",
+            "/norestart",
+            "LISTEN_PORT={{ node_exporter_port }}",
+            "EXTRATEXT=installation=ansible,env=dev",
+            'ENABLED_COLLECTORS=os,cpu,memory,disk,net,logon,system,tcp,service,process,ad,iis'
+        )
+        
+        Start-Process msiexec.exe -Wait -ArgumentList ($args -join " ")
+        
+        # Verify installation
+        $service = Get-Service -Name "windows_exporter" -ErrorAction SilentlyContinue
+        if ($service.Status -eq "Running") {
+            Write-Host "Windows Exporter installed and running on port {{ node_exporter_port }}" -ForegroundColor Green
+        }
+      tags: prometheus
+
+    - name: Configure firewall for Prometheus Exporter
+      ansible.windows.win_firewall_rule:
+        name: "Prometheus Windows Exporter"
+        localport: "{{ node_exporter_port }}"
+        action: allow
+        direction: in
+        protocol: tcp
+        state: present
+        enabled: yes
+      tags: prometheus
+
+    - name: Verify exporter metrics endpoint
+      ansible.windows.win_shell: |
+        $response = Invoke-WebRequest -Uri "http://localhost:{{ node_exporter_port }}/metrics" -UseBasicParsing
+        $lines = ($response.Content -split "`n") | Where-Object { $_ -match "^windows_" }
+        Write-Host "Windows Exporter metrics collected: $($lines.Count)" -ForegroundColor Green
+        $lines | Select-Object -First 5
+      tags: verify
+
+    # ============================================================
+    # 2. PROMETHEUS SERVER (LOCAL COLLECTOR)
+    # ============================================================
+    - name: Download Prometheus Server
+      ansible.windows.win_shell: |
+        $url = "https://github.com/prometheus/prometheus/releases/download/v2.45.0/prometheus-2.45.0.windows-amd64.zip"
+        $zipPath = "C:\Monitoring\prometheus.zip"
+        $extractPath = "C:\Monitoring\prometheus"
+        
+        [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+        Invoke-WebRequest -Uri $url -OutFile $zipPath -UseBasicParsing
+        
+        Expand-Archive -Path $zipPath -DestinationPath $extractPath -Force
+        
+        Write-Host "Prometheus downloaded and extracted" -ForegroundColor Green
+      tags: prometheus_server
+
+    - name: Configure Prometheus to scrape local exporter
+      ansible.windows.win_shell: |
+        $configPath = "C:\Monitoring\prometheus\prometheus.yml"
+        
+        # Backup original config
+        Copy-Item -Path $configPath -Destination "$configPath.bak" -Force
+        
+        # New configuration
+        $config = @"
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: 'windows_workstation'
+    static_configs:
+      - targets: ['localhost:{{ node_exporter_port }}']
+        labels:
+          hostname: '$env:COMPUTERNAME'
+          environment: 'dev'
+          managed_by: 'ansible'
+
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+"@
+        Set-Content -Path $configPath -Value $config -Encoding UTF8
+        
+        Write-Host "Prometheus configured to scrape localhost:{{ node_exporter_port }}" -ForegroundColor Green
+      tags: prometheus_server
+
+    - name: Create Prometheus Windows Service
+      ansible.windows.win_shell: |
+        $serviceName = "prometheus"
+        $servicePath = "C:\Monitoring\prometheus\prometheus.exe"
+        $serviceArgs = "--config.file=C:\Monitoring\prometheus\prometheus.yml --storage.tsdb.path=C:\Monitoring\prometheus\data"
+        
+        # Check if service exists
+        $existing = Get-Service -Name $serviceName -ErrorAction SilentlyContinue
+        if (-not $existing) {
+            New-Service -Name $serviceName `
+                -BinaryPathName "`"$servicePath`" $serviceArgs" `
+                -DisplayName "Prometheus Server" `
+                -Description "Prometheus monitoring server scraping Windows metrics" `
+                -StartupType Automatic
+            
+            Start-Service -Name $serviceName
+            Write-Host "Prometheus Server installed and started" -ForegroundColor Green
+        } else {
+            Set-Service -Name $serviceName -StartupType Automatic
+            Restart-Service -Name $serviceName -Force
+            Write-Host "Prometheus Server service restarted" -ForegroundColor Yellow
+        }
+      tags: prometheus_server
+
+    - name: Verify Prometheus is running
+      ansible.windows.win_shell: |
+        $service = Get-Service -Name "prometheus" -ErrorAction SilentlyContinue
+        $web = $null
+        try {
+            $web = Invoke-WebRequest -Uri "http://localhost:9090/-/ready" -UseBasicParsing -TimeoutSec 5
+        } catch {}
+        
+        [PSCustomObject]@{
+            ServiceName = "prometheus"
+            Status = $service.Status
+            WebStatus = if ($web.StatusCode -eq 200) { "OK" } else { "Not Ready" }
+        } | ConvertTo-Json
+      register: prometheus_status
+      tags: verify
+
+    - name: Display Prometheus status
+      debug:
+        msg: "{{ prometheus_status.stdout }}"
+      tags: verify
+
+    # ============================================================
+    # 3. GRAFANA (VIA DOCKER OU STANDALONE)
+    # ============================================================
+    - name: Install Grafana via Winget
+      ansible.windows.win_shell: |
+        winget install --id Grafana.Grafana -h --accept-package-agreements
+      tags: grafana
+
+    - name: Configure Grafana
+      ansible.windows.win_shell: |
+        $configPath = "$env:PROGRAMFILES\GrafanaLabs\grafana\conf\defaults.ini"
+        
+        # Configure Grafana to start on boot
+        $service = Get-Service -Name "grafana" -ErrorAction SilentlyContinue
+        if ($service) {
+            Set-Service -Name "grafana" -StartupType Automatic
+            Start-Service -Name "grafana" -Force
+            Write-Host "Grafana service started" -ForegroundColor Green
+        }
+      tags: grafana
+
+    - name: Add Prometheus datasource to Grafana
+      ansible.windows.win_shell: |
+        # Wait for Grafana to be ready
+        Start-Sleep -Seconds 10
+        
+        $body = @{
+            name = "Prometheus"
+            type = "prometheus"
+            url = "http://localhost:9090"
+            access = "proxy"
+            isDefault = $true
+        } | ConvertTo-Json
+        
+        try {
+            $response = Invoke-RestMethod -Uri "http://localhost:3000/api/datasources" `
+                -Method Post `
+                -Body $body `
+                -ContentType "application/json" `
+                -Headers @{"Authorization" = "Basic YWRtaW46YWRtaW4="}  # admin:admin
+            
+            Write-Host "Prometheus datasource added to Grafana" -ForegroundColor Green
+        } catch {
+            Write-Host "Grafana may need manual configuration: $_" -ForegroundColor Yellow
+        }
+      tags: grafana
+
+    # ============================================================
+    # 4. GENERATE DASHBOARD CONFIG
+    # ============================================================
+    - name: Create dashboard loading script
+      ansible.windows.win_shell: |
+        $dashboardDir = "C:\Monitoring\dashboards"
+        New-Item -ItemType Directory -Force -Path $dashboardDir | Out-Null
+        
+        @'
+        {
+            "dashboard": {
+                "title": "Windows Workstation Overview",
+                "tags": ["windows", "prometheus", "ansible"],
+                "timezone": "browser",
+                "panels": [
+                    {
+                        "title": "CPU Usage",
+                        "type": "gauge",
+                        "gridPos": {"h": 8, "w": 8, "x": 0, "y": 0},
+                        "targets": [{
+                            "expr": "100 - (avg by(instance) (rate(windows_cpu_time_total{mode=\"idle\"}[5m])) * 100)",
+                            "legendFormat": "CPU"
+                        }]
+                    },
+                    {
+                        "title": "Memory Usage",
+                        "type": "gauge",
+                        "gridPos": {"h": 8, "w": 8, "x": 8, "y": 0},
+                        "targets": [{
+                            "expr": "100 * (1 - (windows_os_physical_memory_free_bytes / windows_cs_physical_memory_bytes))",
+                            "legendFormat": "Memory"
+                        }]
+                    },
+                    {
+                        "title": "Disk C: Usage",
+                        "type": "gauge",
+                        "gridPos": {"h": 8, "w": 8, "x": 16, "y": 0},
+                        "targets": [{
+                            "expr": "100 * (1 - (windows_logical_disk_free_bytes{volume=\"C:\"} / windows_logical_disk_size_bytes{volume=\"C:\"}))",
+                            "legendFormat": "C: Drive"
+                        }]
+                    },
+                    {
+                        "title": "Network Traffic",
+                        "type": "graph",
+                        "gridPos": {"h": 8, "w": 24, "x": 0, "y": 8},
+                        "targets": [
+                            {"expr": "rate(windows_net_bytes_received_total[5m])", "legendFormat": "Received"},
+                            {"expr": "rate(windows_net_bytes_sent_total[5m])", "legendFormat": "Sent"}
+                        ]
+                    },
+                    {
+                        "title": "Active Logons",
+                        "type": "stat",
+                        "gridPos": {"h": 6, "w": 6, "x": 0, "y": 16},
+                        "targets": [{"expr": "windows_logon_logon_sessions"}]
+                    },
+                    {
+                        "title": "Running Services",
+                        "type": "stat",
+                        "gridPos": {"h": 6, "w": 6, "x": 6, "y": 16},
+                        "targets": [{"expr": "count(windows_service_status{status=\"running\"})"}]
+                    },
+                    {
+                        "title": "Uptime (days)",
+                        "type": "stat",
+                        "gridPos": {"h": 6, "w": 6, "x": 12, "y": 16},
+                        "targets": [{"expr": "time() - windows_system_system_up_time"}]
+                    },
+                    {
+                        "title": "AD Operations",
+                        "type": "graph",
+                        "gridPos": {"h": 6, "w": 6, "x": 18, "y": 16},
+                        "targets": [{"expr": "rate(windows_ad_ldap_binds_total[5m])"}]
+                    }
+                ]
+            },
+            "overwrite": true
+        }
+        '@ | Set-Content -Path "$dashboardDir\windows-overview.json" -Encoding UTF8
+        
+        Write-Host "Dashboard JSON created at $dashboardDir\windows-overview.json" -ForegroundColor Green
+      tags: dashboard
+
+    # ============================================================
+    # 5. FINAL SUMMARY
+    # ============================================================
+    - name: Generate monitoring summary
+      ansible.windows.win_shell: |
+        $summary = [PSCustomObject]@{
+            Hostname            = $env:COMPUTERNAME
+            WindowsExporter     = "http://localhost:{{ node_exporter_port }}/metrics"
+            PrometheusServer    = "http://localhost:9090"
+            Grafana             = "http://localhost:3000"
+            GrafanaCredentials  = "admin:admin"
+            DashboardFile       = "C:\Monitoring\dashboards\windows-overview.json"
+            Collectors          = "os,cpu,memory,disk,net,logon,system,tcp,service,process,ad,iis"
+        }
+        $summary | ConvertTo-Json
+      register: monitoring_summary
+      tags: verify
+
+    - name: Display monitoring summary
+      debug:
+        msg: "{{ monitoring_summary.stdout }}"
+      tags: verify
