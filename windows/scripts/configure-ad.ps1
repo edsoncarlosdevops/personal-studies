@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    Configures Windows Server 2022 as a Domain Controller, creates GPOs, and scheduled tasks.
+    Configures Windows Server 2022 as a Domain Controller, creates GPOs, batch users, and scheduled tasks.
     Must be executed during Windows Server startup (userdata).
 #>
 
@@ -9,6 +9,9 @@ $domainName = 'lab.local'
 $netbiosName = 'LAB'
 $safeModePass = ConvertTo-SecureString 'Admin@2026' -AsPlainText -Force
 $logPath = 'C:\Logs\configure-ad.log'
+
+# Number of lab users to create (configurable via environment variable)
+$userCount = [int]($env:USER_COUNT -or 10)
 
 Start-Transcript -Path $logPath -Append
 
@@ -77,7 +80,7 @@ try {
         $gpo = New-GPO -Name $gpoName -Comment 'Launch Notepad automatically for domain users at logon'
     }
 
-    # Check if GPO is already linked (Get-GPLink may not exist in some versions)
+    # Check if GPO is already linked
     $linkExists = $false
     try {
         $links = Get-GPLink -Guid $gpo.Id -ErrorAction SilentlyContinue
@@ -118,31 +121,39 @@ try {
 
     Set-GPRegistryValue -Name $gpoUpdate -Key 'HKCU\Software\Microsoft\Windows\CurrentVersion\Policies\Explorer' -ValueName 'NoViewOnDrive' -Type DWord -Value 4 | Out-Null
 
-    # Create Test Organizational Unit
-    $ouName = 'TestOU'
-    $testOu = Get-ADOrganizationalUnit -Filter "Name -eq '$ouName'" -ErrorAction SilentlyContinue
-    if (-not $testOu) {
+    # Create Lab Organizational Unit
+    $ouName = 'LabUsers'
+    $labOu = Get-ADOrganizationalUnit -Filter "Name -eq '$ouName'" -ErrorAction SilentlyContinue
+    if (-not $labOu) {
         New-ADOrganizationalUnit -Name $ouName -Path $domainDn -ProtectedFromAccidentalDeletion $false | Out-Null
+        Write-Host "=== OU created: $ouName ===" -ForegroundColor Green
     }
 
-    # Create test user
+    # Create batch lab users with ChangePasswordAtLogon = $true
     $ouPath = "OU=$ouName,$domainDn"
-    $testUser = 'testuser'
-    $adUser = Get-ADUser -Filter "SamAccountName -eq '$testUser'" -ErrorAction SilentlyContinue
-    if (-not $adUser) {
-        $plainPassword = "P@ssw0rd123!"
-        $securePassword = ConvertTo-SecureString $plainPassword -AsPlainText -Force
-        New-ADUser `
-            -Name $testUser `
-            -SamAccountName $testUser `
-            -UserPrincipalName "$testUser@$domainName" `
-            -Path $ouPath `
-            -AccountPassword $securePassword `
-            -Enabled $true `
-            -ChangePasswordAtLogon $false `
-            -PasswordNeverExpires $true | Out-Null
+    $plainPassword = "P@ssw0rd123!"
 
-        Write-Host "=== Test user created: $testUser / $plainPassword ===" -ForegroundColor Yellow
+    Write-Host "=== Creating $userCount lab users with forced password change on first logon ===" -ForegroundColor Green
+
+    for ($i = 1; $i -le $userCount; $i++) {
+        $username = "user$i"
+        $adUser = Get-ADUser -Filter "SamAccountName -eq '$username'" -ErrorAction SilentlyContinue
+        if (-not $adUser) {
+            $securePassword = ConvertTo-SecureString $plainPassword -AsPlainText -Force
+            New-ADUser `
+                -Name "User $i" `
+                -SamAccountName $username `
+                -UserPrincipalName "$username@$domainName" `
+                -Path $ouPath `
+                -AccountPassword $securePassword `
+                -Enabled $true `
+                -ChangePasswordAtLogon $true `
+                -PasswordNeverExpires $false | Out-Null
+
+            Write-Host "    [+] Created: $username@$domainName (password change required on first logon)" -ForegroundColor Yellow
+        } else {
+            Write-Host "    [-] Skipped: $username (already exists)" -ForegroundColor Gray
+        }
     }
 
     # Create scheduled task: Daily Reboot at 03:00 AM
@@ -158,6 +169,7 @@ try {
             -Action $action `
             -RunLevel Highest `
             -Force | Out-Null
+        Write-Host "=== Scheduled task '$taskName' created (daily reboot at 03:00) ===" -ForegroundColor Green
     }
 
     Write-Host "=== Applying GPOs ===" -ForegroundColor Green
@@ -168,7 +180,11 @@ try {
 
     # Grant RDP access to domain users via local policy
     Write-Host "=== Granting RDP permissions to domain users ===" -ForegroundColor Green
-    Add-ADGroupMember -Identity "Remote Desktop Users" -Members "Domain Users" -ErrorAction SilentlyContinue
+    try {
+        Add-ADGroupMember -Identity "Remote Desktop Users" -Members "Domain Users" -ErrorAction SilentlyContinue
+    } catch {
+        Write-Host "    [!] Could not add Domain Users to Remote Desktop Users group: $_" -ForegroundColor Yellow
+    }
 
     # Add Remote Desktop Users SID to the local RDP policy
     $secpolFile = "C:\Logs\secpol.cfg"
@@ -186,10 +202,19 @@ try {
         Write-Host "=== RDP permission granted for domain users ===" -ForegroundColor Green
     }
 
+    # Generate users report file
+    $reportPath = "C:\Logs\lab-users.csv"
+    Get-ADUser -Filter * -SearchBase $ouPath -Properties UserPrincipalName, PasswordLastSet, PasswordExpired |
+        Select-Object Name, SamAccountName, UserPrincipalName, Enabled, PasswordExpired, PasswordLastSet |
+        Export-Csv -Path $reportPath -NoTypeInformation
+    Write-Host "=== Users report generated: $reportPath ===" -ForegroundColor Green
+
     # Remove RunOnce entry so it doesn't run again
     $runOncePath = 'HKLM:\Software\Microsoft\Windows\CurrentVersion\RunOnce'
     Remove-ItemProperty -Path $runOncePath -Name 'ConfigureAD' -ErrorAction SilentlyContinue
     Write-Host "=== RunOnce ConfigureAD removed ===" -ForegroundColor Green
+
+    Write-Host "=== Configuration completed successfully ===" -ForegroundColor Green
 }
 catch {
     Write-Host "=== ERROR: $_ ===" -ForegroundColor Red
