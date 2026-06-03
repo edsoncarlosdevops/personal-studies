@@ -54,9 +54,10 @@ output "workstation_names" {
 
 # ---- Ansible Inventory ----
 output "ansible_inventory" {
-  description = "Ansible inventory YAML content. Run: terraform output -raw ansible_inventory > ../ansible/inventory/dev.yml"
+  description = "Ansible inventory YAML content. The inventory is also automatically generated during terraform apply in ansible/inventory/dev.yml"
   value = templatefile("${path.module}/templates/inventory.tpl", {
     workstation_ips = module.windows_workstation[*].public_ip
+    admin_password  = random_password.admin.result
   })
 }
 

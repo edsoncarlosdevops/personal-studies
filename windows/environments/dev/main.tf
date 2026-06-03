@@ -96,3 +96,12 @@ module "windows_workstation" {
   key_name           = aws_key_pair.windows_admin.key_name
   hostname           = "WORKSTATION-${format("%02d", count.index + 1)}"
 }
+
+# ---- Generate Ansible Inventory Automatically ----
+resource "local_file" "ansible_inventory" {
+  content = templatefile("${path.module}/templates/inventory.tpl", {
+    workstation_ips = module.windows_workstation[*].public_ip
+    admin_password  = random_password.admin.result
+  })
+  filename = "${path.root}/../../ansible/inventory/dev.yml"
+}
