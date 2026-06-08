@@ -1,8 +1,9 @@
 # ═══════════════════════════════════════════════════════════
 # Terragrunt Root - Monitoring
 # ═══════════════════════════════════════════════════════════
-# Arquivo raiz para permitir comandos run-all nos módulos
-# de monitoring (deploy, destroy, output, etc.)
+# Raiz para os módulos de monitoramento.
+# Herda configurações do pai (deploy/terragrunt.hcl)
+# e adiciona dependências entre os módulos.
 #
 # Uso:
 #   terragrunt run-all apply     # Aplica todos os módulos
@@ -10,9 +11,14 @@
 #   terragrunt run-all output    # Output de todos os módulos
 # ═══════════════════════════════════════════════════════════
 
-# Configurações que os módulos filhos herdam via include
-# (os módulos filhos usam: include { path = find_in_parent_folders() })
+# Herda configurações do pai (deploy/terragrunt.hcl)
+include "root" {
+  path = find_in_parent_folders()
+}
 
-# Sem configurações - apenas para ser um ponto de entrada
-# para o comando 'terragrunt run -- run-all'
+# Inputs compartilhados entre todos os módulos de monitoring
+inputs = {
+  environment = "dev"
+  cluster_name = "dev-eks-cluster"
+}
 

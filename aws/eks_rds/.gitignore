@@ -6,6 +6,9 @@
 *.terraform.lock.hcl
 crash.log
 
+# 🗑️ Terragrunt cache
+.terragrunt-cache/
+
 # 🔑 Chaves e secrets
 *.pem
 *.key
@@ -26,3 +29,4 @@ Thumbs.db
 *.swp
 *.swo
 *~
+

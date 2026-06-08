@@ -6,12 +6,24 @@ include {
   path = find_in_parent_folders()
 }
 
-inputs = {
-  otel_collector_release_name   = "opentelemetry-collector"
-  otel_collector_chart_name     = "opentelemetry-collector"
-  otel_collector_namespace      = "monitoring"
-  otel_collector_chart_version  = "0.112.0"
-  otel_collector_repository_url = "https://open-telemetry.github.io/opentelemetry-helm-charts"
-
-  otel_collector_replica_count = 1
+# Depende do namespace ser criado primeiro
+dependencies {
+  paths = ["../namespace"]
 }
+
+dependency "namespace" {
+  config_path = "../namespace"
+}
+
+inputs = {
+  opentelemetry_collector_release_name   = "opentelemetry-collector"
+  opentelemetry_collector_chart_name     = "opentelemetry-collector"
+  opentelemetry_collector_namespace      = "monitoring"
+  opentelemetry_collector_chart_version  = "0.105.0"
+  opentelemetry_collector_repository_url = "https://open-telemetry.github.io/opentelemetry-helm-charts"
+}
+  opentelemetry_collector_namespace      = "monitoring"
+  opentelemetry_collector_chart_version  = "0.105.0"
+  opentelemetry_collector_repository_url = "https://open-telemetry.github.io/opentelemetry-helm-charts"
+}
+

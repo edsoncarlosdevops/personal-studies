@@ -6,6 +6,15 @@ include {
   path = find_in_parent_folders()
 }
 
+# Depende do namespace e do cluster EKS
+dependencies {
+  paths = ["../namespace"]
+}
+
+dependency "namespace" {
+  config_path = "../namespace"
+}
+
 inputs = {
   context                   = "eks-dev"
   prometheus_release_name   = "prometheus"
@@ -20,3 +29,4 @@ inputs = {
 
   prometheus_replica_count = 1
 }
+

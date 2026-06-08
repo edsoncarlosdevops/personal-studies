@@ -6,6 +6,15 @@ include {
   path = find_in_parent_folders()
 }
 
+# Depende do namespace ser criado primeiro
+dependencies {
+  paths = ["../namespace"]
+}
+
+dependency "namespace" {
+  config_path = "../namespace"
+}
+
 inputs = {
   grafana_release_name   = "grafana"
   grafana_chart_name     = "grafana"
@@ -19,3 +28,4 @@ inputs = {
 
   grafana_replica_count = 1
 }
+
