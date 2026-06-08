@@ -1,0 +1,35 @@
+# Desabilitando componentes extras para economizar recursos no EKS
+alertmanager:
+  enabled: false
+
+prometheus-pushgateway:
+  enabled: false
+
+prometheus-node-exporter:
+  enabled: false
+
+kube-state-metrics:
+  enabled: false
+
+server:
+  retention: "5d"
+  replicaCount: ${prometheus_replica_count}
+  persistentVolume:
+    enabled: false # Desabilitado para lab, sem necessidade de persistência
+  
+  # Recursos ajustados para EKS (t3.medium)
+  resources:
+    limits:
+      cpu: 500m
+      memory: 1Gi
+    requests:
+      cpu: 100m
+      memory: 256Mi
+
+serverFiles:
+  prometheus.yml:
+    scrape_configs:
+      - job_name: prometheus
+        static_configs:
+          - targets:
+            - localhost:9090

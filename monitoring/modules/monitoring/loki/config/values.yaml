@@ -1,3 +1,19 @@
+# ═══════════════════════════════════════════════════════════
+# Loki - Values para Helm Chart
+# ═══════════════════════════════════════════════════════════
+#
+# ATENÇÃO: path_prefix e permissões de escrita
+# - O container do Loki roda como user não-root (UID 10001)
+# - O diretório /var/loki NÃO é writable pelo user não-root
+#   na imagem padrão quando sem persistência (emptyDir)
+# - Solução: usar /tmp/loki como path_prefix, já que /tmp
+#   tem um emptyDir montado e permissão correta
+#
+# ATENÇÃO: StorageClass no EKS
+# - StorageClass "gp2" com volumeBindingMode: WaitForFirstConsumer
+# - Se habilitar persistência, usar storageClass: "gp2"
+# - Para lab, manter persistence.enabled: false
+
 # --- Configurações de Nível Raiz (IMPORTANTE: Não indentar) ---
 deploymentMode: SingleBinary
 
@@ -6,14 +22,16 @@ loki:
   
   commonConfig:
     replication_factor: 1
-    path_prefix: /var/loki
+    # path_prefix usa /tmp/loki pois /var/loki é read-only
+    # para o user não-root do container Loki
+    path_prefix: /tmp/loki
 
   # Armazenamento no disco local (Filesystem)
   storage:
     type: "filesystem"
     filesystem:
-      chunks_directory: /var/loki/chunks
-      rules_directory: /var/loki/rules
+      chunks_directory: /tmp/loki/chunks
+      rules_directory: /tmp/loki/rules
   
   schemaConfig:
     configs:
@@ -29,13 +47,8 @@ loki:
 singleBinary:
   replicas: 1
   persistence:
-    enabled: true
-    size: ${loki_pvc_size}
-    storageClass: "local-path"
-    accessModes:
-      - ReadWriteOnce
-  
-  # Recursos leves para Mac M2
+    enabled: false # Desabilitado para lab. Se habilitar, usar storageClass: "gp2"
+  # Recursos leves para EKS (t3.medium)
   resources:
     limits:
       cpu: 1000m
@@ -45,7 +58,7 @@ singleBinary:
       memory: 256Mi
 
 # --- Desabilitar explicitamente componentes distribuídos ---
-# Isso garante que a validação do Chart não reclame da falta de S3
+# Necessário para SingleBinary em modo local (sem S3)
 backend:
   replicas: 0
 read:
@@ -53,8 +66,9 @@ read:
 write:
   replicas: 0
 gateway:
-  enabled: false # Usaremos o service do próprio singleBinary
+  enabled: false
 resultsCache:
   enabled: false
 chunksCache:
   enabled: false
+

@@ -1,10 +1,23 @@
+# ═══════════════════════════════════════════════════════════
+# Tempo - Values para Helm Chart
+# ═══════════════════════════════════════════════════════════
+#
+# ATENÇÃO: StorageClass no EKS
+# - StorageClass "gp2" com volumeBindingMode: WaitForFirstConsumer
+# - Se habilitar persistência, usar storageClass: "gp2"
+# - Para lab, manter persistence.enabled: false
+#
+# ATENÇÃO: Backend local vs S3
+# - Em modo single binary, usar backend: "local" (sem S3)
+# - Para produção, configurar S3/GCS como backend
+
 replicas: 1
 
 tempo:
   repository: grafana/tempo
   tag: 2.3.1
   
-  # Configuração para rodar local sem S3
+  # Configuração para rodar sem S3 (modo local)
   storage:
     trace:
       backend: local 
@@ -13,6 +26,7 @@ tempo:
       wal:
         path: /var/tempo/wal
 
+  # Recursos para EKS (t3.medium)
   resources:
     limits:
       cpu: 500m
@@ -22,6 +36,5 @@ tempo:
       memory: 128Mi
 
 persistence:
-  enabled: true
-  size: 5Gi
-  storageClass: "standard"
+  enabled: false # Desabilitado para lab. Se habilitar, usar storageClass: "gp2"
+

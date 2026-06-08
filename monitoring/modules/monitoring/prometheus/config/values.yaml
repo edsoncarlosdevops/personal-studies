@@ -1,4 +1,15 @@
-# Desabilitando componentes extras para economizar recursos no Mac local
+# ═══════════════════════════════════════════════════════════
+# Prometheus - Values para Helm Chart
+# ═══════════════════════════════════════════════════════════
+#
+# ATENÇÃO: StorageClass no EKS
+# - O EKS usa "gp2" como storageClass padrão (não "standard")
+# - O storageClass gp2 tem volumeBindingMode: WaitForFirstConsumer
+#   Isso significa que o PV só é criado quando um Pod realmente
+#   utiliza o PVC, o que pode causar delays no scheduling
+# - Para labs, é mais prático desabilitar persistência
+
+# Desabilitando componentes extras para economizar recursos no EKS
 alertmanager:
   enabled: false
 
@@ -11,17 +22,13 @@ prometheus-node-exporter:
 kube-state-metrics:
   enabled: false
 
-persistentVolume:
-  enabled: true
-  size: "5Gi"
-  # No OrbStack/K3s/Docker Desktop, deixar vazio ou usar 'standard' usa o disco do host
-  storageClass: "standard" 
-
 server:
   retention: "5d"
   replicaCount: ${prometheus_replica_count}
+  persistentVolume:
+    enabled: false # Desabilitado para lab (EKS t3.medium), sem necessidade de persistência
   
-  # Recursos ajustados para ambiente local (Mac M2)
+  # Recursos ajustados para EKS (t3.medium - 2 vCPU, 4GB RAM)
   resources:
     limits:
       cpu: 500m

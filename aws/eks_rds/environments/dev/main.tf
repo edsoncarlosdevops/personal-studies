@@ -17,9 +17,9 @@ module "eks" {
   k8s_version         = "1.30"
   public_subnet_ids   = module.vpc.public_subnet_ids
   private_subnet_ids  = module.vpc.private_subnet_ids
-  node_desired_size   = 2
-  node_min_size       = 1
-  node_max_size       = 3
+  node_desired_size   = 3
+  node_min_size       = 2
+  node_max_size       = 4
   node_instance_types = ["t3.medium"]
 }
 
@@ -78,3 +78,4 @@ module "argocd" {
   eks_cluster_name           = module.eks.cluster_name
   argocd_version             = "7.8.1"
 }
+
