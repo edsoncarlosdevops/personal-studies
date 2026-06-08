@@ -1,0 +1,11 @@
+# 🗑️ Terraform / Terragrunt
+.terraform/
+*.tfstate
+*.tfstate.backup
+*.tfstate.lock.info
+*.terraform.lock.hcl
+crash.log
+terragrunt.log
+
+# 📁 Diretórios do sistema
+.DS_Store
