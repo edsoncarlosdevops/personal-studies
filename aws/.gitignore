@@ -1,0 +1,31 @@
+# 🗑️ Terraform
+.terraform/
+*.tfstate
+*.tfstate.backup
+*.tfstate.lock.info
+*.terraform.lock.hcl
+crash.log
+
+# 🗑️ Terragrunt cache
+.terragrunt-cache/
+
+# 🔑 Chaves e secrets
+*.pem
+*.key
+*.p12
+
+# 📁 Diretórios do sistema
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# 📦 IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
