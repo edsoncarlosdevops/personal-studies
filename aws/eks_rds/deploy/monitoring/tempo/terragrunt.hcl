@@ -1,5 +1,5 @@
 terraform {
-  source = "../../../../../monitoring/modules/monitoring/grafana_tempo"
+  source = "../../../../../monitoring/modules/monitoring/tempo"
 }
 
 include {

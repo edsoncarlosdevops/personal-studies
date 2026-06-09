@@ -1,5 +1,6 @@
 # ═══════════════════════════════════════════════════════════
 # Tempo - Values para Helm Chart
+# (antigo grafana_tempo, renomeado para consistência)
 # ═══════════════════════════════════════════════════════════
 #
 # ATENÇÃO: StorageClass no EKS
