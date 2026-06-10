@@ -1,33 +1,50 @@
-# ═══════════════════════════════════════════════════════════
-# Tempo - Values para Helm Chart
-# (antigo grafana_tempo, renomeado para consistência)
-# ═══════════════════════════════════════════════════════════
+# =====================================================================
+# 🛠️ Grafana Tempo - Configuration System (Production Ready)
+# =====================================================================
+# Tempo é um backend de tracing distribuído de alta escala e baixo custo.
+# Ele foi projetado para indexar traces usando apenas armazenamento de objetos
+# (S3/GCS) e integrar-se fortemente com logs (Loki) e métricas (Prometheus).
+# =====================================================================
 #
-# ATENÇÃO: StorageClass no EKS
+# ⚠️ ATENÇÃO: StorageClass no EKS
 # - StorageClass "gp2" com volumeBindingMode: WaitForFirstConsumer
 # - Se habilitar persistência, usar storageClass: "gp2"
 # - Para lab, manter persistence.enabled: false
 #
-# ATENÇÃO: Backend local vs S3
+# ⚠️ ATENÇÃO: Backend local vs S3
 # - Em modo single binary, usar backend: "local" (sem S3)
 # - Para produção, configurar S3/GCS como backend
 
+# Réplicas da instância centralizada do Tempo
 replicas: 1
 
 tempo:
+  # Imagem estável oficial do Tempo
   repository: grafana/tempo
   tag: 2.3.1
   
-  # Configuração para rodar sem S3 (modo local)
+  # Configuração para rodar sem S3 (modo local usando o disco do nó EKS)
   storage:
     trace:
       backend: local 
       local:
         path: /var/tempo/traces
       wal:
+        # Write-Ahead Log (WAL): Salva em disco temporariamente as requisições
+        # recebidas antes de processar e persistir no backend. Evita perda de dados.
         path: /var/tempo/wal
 
-  # Recursos para EKS (t3.medium)
+  # 🔹 [PRODUÇÃO] EXEMPLO: Configuração de Armazenamento Persistente no AWS S3
+  # Em produção, você armazena os blocos de traces compactados diretamente no S3.
+  # storage:
+  #   trace:
+  #     backend: s3
+  #     s3:
+  #       bucket: meu-bucket-tempo-traces-s3
+  #       endpoint: s3.amazonaws.com
+  #       region: us-east-1
+
+  # Recursos recomendados para micro instâncias de EKS (t3.medium)
   resources:
     limits:
       cpu: 500m
@@ -38,4 +55,20 @@ tempo:
 
 persistence:
   enabled: false # Desabilitado para lab. Se habilitar, usar storageClass: "gp2"
+
+# 🔹 [PRODUÇÃO] EXEMPLO: Habilitar receptores de outros protocolos no Tempo
+# O Tempo pode atuar como receptor gRPC ou HTTP para vários formatos de telemetria legados.
+# tempo:
+#   receivers:
+#     jaeger:
+#       protocols:
+#         thrift_binary:
+#           endpoint: 0.0.0.0:6832
+#         thrift_compact:
+#           endpoint: 0.0.0.0:6831
+#         grpc:
+#           endpoint: 0.0.0.0:14250
+#     zipkin:
+#       endpoint: 0.0.0.0:9411
+
 

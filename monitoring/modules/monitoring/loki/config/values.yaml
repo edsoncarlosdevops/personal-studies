@@ -1,23 +1,31 @@
-# ═══════════════════════════════════════════════════════════
-# Loki - Values para Helm Chart
-# ═══════════════════════════════════════════════════════════
+# =====================================================================
+# 🛠️ Grafana Loki - Configuration System (Production Ready)
+# =====================================================================
+# Loki é um sistema de agregação de logs inspirado no Prometheus.
+# Ele indexa apenas metadados (labels) em vez do texto completo,
+# tornando o armazenamento de logs extremamente barato e performático.
+# =====================================================================
 #
-# ATENÇÃO: path_prefix e permissões de escrita
+# ⚠️ ATENÇÃO: path_prefix e permissões de escrita
 # - O container do Loki roda como user não-root (UID 10001)
 # - O diretório /var/loki NÃO é writable pelo user não-root
 #   na imagem padrão quando sem persistência (emptyDir)
 # - Solução: usar /tmp/loki como path_prefix, já que /tmp
 #   tem um emptyDir montado e permissão correta
 #
-# ATENÇÃO: StorageClass no EKS
+# ⚠️ ATENÇÃO: StorageClass no EKS
 # - StorageClass "gp2" com volumeBindingMode: WaitForFirstConsumer
 # - Se habilitar persistência, usar storageClass: "gp2"
 # - Para lab, manter persistence.enabled: false
 
-# --- Configurações de Nível Raiz (IMPORTANTE: Não indentar) ---
+# Modo de deploy do Loki:
+# - SingleBinary: Roda todos os componentes (ingester, querier, etc) em um único processo. (Ideal para labs/ambientes leves)
+# - SimpleScalable: Separa os caminhos de escrita e leitura para escalonamento independente.
+# - Distributed: Cada microsserviço roda como um deploy isolado (altamente escalável para produção).
 deploymentMode: SingleBinary
 
 loki:
+  # Desabilita autenticação multi-tenant. Quando true, exige cabeçalho X-Scope-OrgID nas requisições.
   auth_enabled: false
   
   commonConfig:
@@ -33,22 +41,40 @@ loki:
       chunks_directory: /tmp/loki/chunks
       rules_directory: /tmp/loki/rules
   
+  # 🔹 [PRODUÇÃO] EXEMPLO: Configuração de Armazenamento no AWS S3
+  # Em produção, você NUNCA usa filesystem local para armazenamento persistente de logs.
+  # Você deve usar buckets S3 estruturados com IAM Roles for Service Accounts (IRSA).
+  # storage:
+  #   type: "s3"
+  #   s3:
+  #     s3: s3://us-east-1/nome-do-seu-bucket-de-logs-s3
+  #     s3forcepathstyle: true
+  
+  # Configuração de schema de índice. TSDB (Time Series Database) é o mais moderno e eficiente.
   schemaConfig:
     configs:
       - from: "2024-01-01"
         store: tsdb
-        object_store: filesystem
+        object_store: filesystem # Modificar para "s3" caso configure armazenamento em bucket AWS S3
         schema: v13
         index:
           prefix: index_
           period: 24h
+
+  # 🔹 [PRODUÇÃO] EXEMPLO: Configuração de Retenção de Logs (Limits Config)
+  # Em produção, é essencial gerenciar o ciclo de vida dos logs para evitar estouro de armazenamento.
+  # limits_config:
+  #   retention_period: 30d # Período máximo de retenção dos logs no banco
+  #   reject_old_samples: true
+  #   reject_old_samples_max_age: 168h # Rejeita logs enviados com data retroativa superior a 7 dias
 
 # --- Configuração do Modo SingleBinary ---
 singleBinary:
   replicas: 1
   persistence:
     enabled: false # Desabilitado para lab. Se habilitar, usar storageClass: "gp2"
-  # Recursos leves para EKS (t3.medium)
+  
+  # Limites e requisições de recursos leves apropriados para t3.medium
   resources:
     limits:
       cpu: 1000m
@@ -71,4 +97,5 @@ resultsCache:
   enabled: false
 chunksCache:
   enabled: false
+
 
