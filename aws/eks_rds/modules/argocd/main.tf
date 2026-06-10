@@ -13,6 +13,12 @@ resource "helm_release" "argocd" {
 
   values = [file("${path.module}/values/values.yaml")]
 
+  # Remove CRDs ao destruir para evitar warning
+  wait             = true
+  wait_for_jobs    = true
+  cleanup_on_fail  = true
+  atomic           = false
+
   depends_on = [kubernetes_namespace.argocd]
 }
 

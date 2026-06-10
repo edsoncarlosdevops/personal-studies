@@ -97,6 +97,12 @@ resource "aws_security_group" "eks_nodes" {
   vpc_id      = var.vpc_id
 
   tags = { Name = "${var.environment}-eks-nodes-sg" }
+
+  # Só destroi depois do node group e do cluster
+  depends_on = [
+    aws_eks_node_group.this,
+    aws_eks_cluster.this
+  ]
 }
 
 # Regras de entrada: permite comunicação entre nodes
