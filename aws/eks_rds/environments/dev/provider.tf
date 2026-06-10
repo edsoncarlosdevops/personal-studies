@@ -2,19 +2,11 @@
 # Providers - Ambiente Dev (EKS)
 # ═══════════════════════════════════════════════════════════
 #
-# ATENÇÃO: Provider Kubernetes/Helm
-# - Anteriormente usava data.aws_eks_cluster e data.aws_eks_cluster_auth
-#   para autenticar via AWS IAM
-# - MUDAMOS para config_path = "~/.kube/config" porque:
-#   1. Evita erro "dial tcp localhost:80: connect: connection refused"
-#      que ocorria ao tentar validar providers antes do EKS existir
-#   2. Permite que o Terraform gerencie recursos K8s mesmo quando
-#      o módulo EKS está sendo criado (depois do primeiro apply)
-#   3. Funciona com 'aws eks update-kubeconfig' já configurado
-#
-# IMPORTANTE: Antes de rodar terraform apply pela primeira vez:
-#   aws eks update-kubeconfig --region us-east-1 --name <cluster-name>
-
+# Provider Kubernetes/Helm:
+# - Usa data.aws_eks_cluster e data.aws_eks_cluster_auth para
+#   autenticar via AWS IAM, sem depender de kubeconfig local
+# - Funciona no primeiro apply, após o cluster EKS ser criado
+# - Basta rodar 'terraform apply' novamente após cluster criado
 terraform {
   required_providers {
     aws = {
@@ -48,13 +40,22 @@ provider "aws" {
   region = "us-east-1"
 }
 
+# Provider Kubernetes autenticando via AWS IAM (sem kubeconfig)
 provider "kubernetes" {
-  config_path = "~/.kube/config"
+  host                   = module.eks.cluster_endpoint
+  cluster_ca_certificate = base64decode(module.eks.cluster_certificate_authority)
+  token                  = data.aws_eks_cluster_auth.this.token
 }
 
 provider "helm" {
   kubernetes {
-    config_path = "~/.kube/config"
+    host                   = module.eks.cluster_endpoint
+    cluster_ca_certificate = base64decode(module.eks.cluster_certificate_authority)
+    token                  = data.aws_eks_cluster_auth.this.token
   }
+}
+# Data sources para autenticação
+data "aws_eks_cluster_auth" "this" {
+  name = module.eks.cluster_name
 }
 

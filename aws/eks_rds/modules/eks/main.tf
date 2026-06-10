@@ -34,7 +34,8 @@ resource "aws_eks_cluster" "this" {
   version  = var.k8s_version
 
   vpc_config {
-    subnet_ids = concat(var.public_subnet_ids, var.private_subnet_ids)
+    subnet_ids         = concat(var.public_subnet_ids, var.private_subnet_ids)
+    security_group_ids = [aws_security_group.eks_cluster.id]
   }
 
   tags = { Name = "${var.environment}-eks-cluster" }
@@ -80,6 +81,57 @@ resource "aws_iam_role_policy_attachment" "ecr_read" {
   role       = aws_iam_role.eks_node_group.name
 }
 
+# Security Group para o cluster EKS (control plane)
+resource "aws_security_group" "eks_cluster" {
+  name        = "${var.environment}-eks-cluster-sg"
+  description = "Security group for EKS cluster control plane"
+  vpc_id      = var.vpc_id
+
+  tags = { Name = "${var.environment}-eks-cluster-sg" }
+}
+
+# Security Group para os worker nodes
+resource "aws_security_group" "eks_nodes" {
+  name        = "${var.environment}-eks-nodes-sg"
+  description = "Security group for EKS worker nodes"
+  vpc_id      = var.vpc_id
+
+  tags = { Name = "${var.environment}-eks-nodes-sg" }
+}
+
+# Regras de entrada: permite comunicação entre nodes
+resource "aws_vpc_security_group_ingress_rule" "nodes_self" {
+  security_group_id = aws_security_group.eks_nodes.id
+
+  description                  = "Permite comunicacao entre os proprios nodes"
+  referenced_security_group_id = aws_security_group.eks_nodes.id
+  from_port                    = 0
+  to_port                      = 65535
+  ip_protocol                  = "tcp"
+}
+
+# Regras de entrada: permite trafego do control plane para nodes
+resource "aws_vpc_security_group_ingress_rule" "nodes_cluster" {
+  security_group_id = aws_security_group.eks_nodes.id
+
+  description                  = "Permite trafego do control plane para os nodes"
+  referenced_security_group_id = aws_security_group.eks_cluster.id
+  from_port                    = 0
+  to_port                      = 65535
+  ip_protocol                  = "tcp"
+}
+
+# Launch template para associar o security group aos nodes
+resource "aws_launch_template" "eks_nodes" {
+  name                   = "${var.environment}-eks-nodes-template"
+  vpc_security_group_ids = [aws_security_group.eks_nodes.id]
+
+  tag_specifications {
+    resource_type = "instance"
+    tags          = { Name = "${var.environment}-eks-node" }
+  }
+}
+
 # Node group com as EC2 que rodam os pods
 resource "aws_eks_node_group" "this" {
   cluster_name    = aws_eks_cluster.this.name
@@ -94,6 +146,11 @@ resource "aws_eks_node_group" "this" {
   }
 
   instance_types = var.node_instance_types
+
+  launch_template {
+    name    = aws_launch_template.eks_nodes.name
+    version = aws_launch_template.eks_nodes.latest_version
+  }
 
   tags = { Name = "${var.environment}-eks-node-group" }
 

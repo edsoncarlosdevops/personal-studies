@@ -49,6 +49,12 @@ variable "engine_version" {
   default     = "16.14"
 }
 
+variable "storage_encrypted" {
+  description = "Enable RDS storage encryption at rest"
+  type        = bool
+  default     = true
+}
+
 variable "allowed_cidr" {
   description = "CIDR allowed to access RDS"
   type        = string

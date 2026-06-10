@@ -3,6 +3,11 @@ variable "environment" {
   type        = string
 }
 
+variable "vpc_id" {
+  description = "ID da VPC para os security groups do EKS"
+  type        = string
+}
+
 variable "public_subnet_ids" {
   description = "IDs of public subnets for the EKS cluster"
   type        = list(string)
@@ -42,3 +47,4 @@ variable "node_instance_types" {
   type        = list(string)
   default     = ["t3.medium"]
 }
+

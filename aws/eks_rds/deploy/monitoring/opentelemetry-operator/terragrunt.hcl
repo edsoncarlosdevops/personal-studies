@@ -1,9 +1,9 @@
 terraform {
-  source = "../../../../../monitoring/modules/monitoring/cert-manager"
+  source = "../../../../../monitoring/modules/monitoring/opentelemetry-operator"
 }
 
 include {
-  path = find_in_parent_folders()
+  path = find_in_parent_folders("root.hcl")
 }
 
 # Depende do namespace ser criado primeiro
@@ -12,13 +12,17 @@ dependencies {
 }
 
 dependency "namespace" {
+  mock_outputs = {
+    namespace_name = "monitoring"
+  }
   config_path = "../namespace"
 }
 
 inputs = {
-  cert_manager_release_name   = "cert-manager"
-  cert_manager_chart_name     = "cert-manager"
-  cert_manager_namespace      = "cert-manager"
-  cert_manager_chart_version  = "v1.16.0"
-  cert_manager_repository_url = "https://charts.jetstack.io"
+  otel_operator_release_name   = "opentelemetry-operator"
+  otel_operator_chart_name     = "opentelemetry-operator"
+  otel_operator_namespace      = "monitoring"
+  otel_operator_chart_version  = "0.105.0"
+  otel_operator_repository_url = "https://open-telemetry.github.io/opentelemetry-helm-charts"
 }
+

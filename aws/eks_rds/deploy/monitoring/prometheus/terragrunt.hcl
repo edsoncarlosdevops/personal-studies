@@ -3,7 +3,7 @@ terraform {
 }
 
 include {
-  path = find_in_parent_folders()
+  path = find_in_parent_folders("root.hcl")
 }
 
 # Depende do namespace e do cluster EKS
@@ -12,6 +12,9 @@ dependencies {
 }
 
 dependency "namespace" {
+  mock_outputs = {
+    namespace_name = "monitoring"
+  }
   config_path = "../namespace"
 }
 

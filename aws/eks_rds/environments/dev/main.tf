@@ -14,6 +14,7 @@ module "eks" {
   source = "../../modules/eks"
 
   environment         = "dev"
+  vpc_id              = module.vpc.vpc_id
   k8s_version         = "1.30"
   public_subnet_ids   = module.vpc.public_subnet_ids
   private_subnet_ids  = module.vpc.private_subnet_ids
