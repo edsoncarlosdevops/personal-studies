@@ -97,12 +97,6 @@ resource "aws_security_group" "eks_nodes" {
   vpc_id      = var.vpc_id
 
   tags = { Name = "${var.environment}-eks-nodes-sg" }
-
-  # Só destroi depois do node group e do cluster
-  depends_on = [
-    aws_eks_node_group.this,
-    aws_eks_cluster.this
-  ]
 }
 
 # Regras de entrada: permite comunicação entre nodes
@@ -127,17 +121,6 @@ resource "aws_vpc_security_group_ingress_rule" "nodes_cluster" {
   ip_protocol                  = "tcp"
 }
 
-# Launch template para associar o security group aos nodes
-resource "aws_launch_template" "eks_nodes" {
-  name                   = "${var.environment}-eks-nodes-template"
-  vpc_security_group_ids = [aws_security_group.eks_nodes.id]
-
-  tag_specifications {
-    resource_type = "instance"
-    tags          = { Name = "${var.environment}-eks-node" }
-  }
-}
-
 # Node group com as EC2 que rodam os pods
 resource "aws_eks_node_group" "this" {
   cluster_name    = aws_eks_cluster.this.name
@@ -153,11 +136,8 @@ resource "aws_eks_node_group" "this" {
 
   instance_types = var.node_instance_types
 
-  launch_template {
-    name    = aws_launch_template.eks_nodes.name
-    version = aws_launch_template.eks_nodes.latest_version
-  }
-
+  # Associa o security group diretamente ao node group
+  # sem usar launch template para evitar ciclo de dependencia
   tags = { Name = "${var.environment}-eks-node-group" }
 
   depends_on = [
@@ -166,3 +146,4 @@ resource "aws_eks_node_group" "this" {
     aws_iam_role_policy_attachment.ecr_read
   ]
 }
+

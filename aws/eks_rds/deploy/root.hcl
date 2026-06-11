@@ -6,9 +6,9 @@
 # contexto. Os módulos filhos herdam estas configurações.
 # ═══════════════════════════════════════════════════════
 
-# Nome do cluster EKS - herdado dos inputs abaixo
 locals {
-  eks_cluster_name = "${include.root.locals.environment}-eks-cluster"
+  environment      = "dev"
+  eks_cluster_name = "${local.environment}-eks-cluster"
 }
 
 remote_state {
@@ -58,13 +58,8 @@ EOF
 
 # Inputs globais
 inputs = {
-  environment = "dev"
+  environment = local.environment
   context     = "eks-dev"
   namespace   = "monitoring"
-}
-
-locals {
-  # Extrai o environment dos inputs para usar no cluster name
-  environment = "dev"
 }
 
