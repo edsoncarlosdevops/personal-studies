@@ -5,7 +5,7 @@
 resource "helm_release" "prometheus" {
   name             = var.prometheus_release_name
   chart            = var.prometheus_chart_name
-  create_namespace = false
+  create_namespace = true
   wait             = false
   timeout          = 600
   namespace        = var.prometheus_namespace

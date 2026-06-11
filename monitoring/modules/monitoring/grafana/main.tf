@@ -5,7 +5,7 @@
 resource "helm_release" "grafana" {
   name             = var.grafana_release_name
   chart            = var.grafana_chart_name
-  create_namespace = false
+  create_namespace = true
   wait             = true
   namespace        = var.grafana_namespace
   version          = var.grafana_chart_version
@@ -19,3 +19,4 @@ data "template_file" "values" {
     grafana_replica_count = var.grafana_replica_count
   }
 }
+

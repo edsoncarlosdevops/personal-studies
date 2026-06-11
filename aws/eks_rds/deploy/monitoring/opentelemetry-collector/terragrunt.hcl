@@ -6,18 +6,6 @@ include {
   path = find_in_parent_folders("root.hcl")
 }
 
-# Depende do namespace ser criado primeiro
-dependencies {
-  paths = ["../namespace"]
-}
-
-dependency "namespace" {
-  mock_outputs = {
-    namespace_name = "monitoring"
-  }
-  config_path = "../namespace"
-}
-
 inputs = {
   otel_collector_release_name   = "opentelemetry-collector"
   otel_collector_chart_name     = "opentelemetry-collector"

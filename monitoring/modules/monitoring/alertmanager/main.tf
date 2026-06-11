@@ -1,7 +1,7 @@
 resource "helm_release" "alertmanager" {
   name             = var.alertmanager_release_name
   chart            = var.alertmanager_chart_name
-  create_namespace = false
+  create_namespace = true
   wait             = true
   namespace        = var.alertmanager_namespace
   version          = var.alertmanager_chart_version

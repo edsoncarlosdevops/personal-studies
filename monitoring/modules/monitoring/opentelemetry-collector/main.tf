@@ -5,7 +5,7 @@
 resource "helm_release" "opentelemetry_collector" {
   name             = var.otel_collector_release_name
   chart            = var.otel_collector_chart_name
-  create_namespace = false
+  create_namespace = true
   wait             = true
   namespace        = var.otel_collector_namespace
   version          = var.otel_collector_chart_version

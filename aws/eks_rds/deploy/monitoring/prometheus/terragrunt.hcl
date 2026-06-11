@@ -6,18 +6,6 @@ include {
   path = find_in_parent_folders("root.hcl")
 }
 
-# Depende do namespace e do cluster EKS
-dependencies {
-  paths = ["../namespace"]
-}
-
-dependency "namespace" {
-  mock_outputs = {
-    namespace_name = "monitoring"
-  }
-  config_path = "../namespace"
-}
-
 inputs = {
   context                   = "eks-dev"
   prometheus_release_name   = "prometheus"

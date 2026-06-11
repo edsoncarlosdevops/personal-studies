@@ -4,7 +4,7 @@ resource "helm_release" "tempo" {
   repository       = var.tempo_repository_url
   namespace        = var.tempo_namespace
   version          = var.tempo_chart_version
-  create_namespace = false # Já criado pelo Grafana/Prometheus
+  create_namespace = true
   wait             = false
 
   values = [

@@ -6,18 +6,6 @@ include {
   path = find_in_parent_folders("root.hcl")
 }
 
-# Depende do namespace ser criado primeiro
-dependencies {
-  paths = ["../namespace"]
-}
-
-dependency "namespace" {
-  mock_outputs = {
-    namespace_name = "monitoring"
-  }
-  config_path = "../namespace"
-}
-
 inputs = {
   cert_manager_release_name   = "cert-manager"
   cert_manager_chart_name     = "cert-manager"
