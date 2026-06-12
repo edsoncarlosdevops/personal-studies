@@ -15,7 +15,54 @@
 #
 # Para testar:
 #   ./monitoring/tests/setup-lab.sh
-# =====================================================================
+#
+# TODO: Conectar no RDS PostgreSQL
+# ================================================================
+# UTILIDADE DO RDS NESTE PROJETO:
+# O RDS PostgreSQL foi provisionado em aws/eks_rds/modules/rds/
+# mas a app api-pedidos AINDA NAO consome ele.
+#
+# Ideias para popular o RDS via app:
+#
+# 1. Adicionar variaveis de ambiente no Deployment:
+#    DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASS
+#    (ler do secret que o modulo app-rds cria)
+#
+# 2. No app.py, importar psycopg2 e conectar no banco:
+#    import psycopg2
+#    conn = psycopg2.connect(
+#        host=os.getenv("DB_HOST"),
+#        port=os.getenv("DB_PORT"),
+#        dbname=os.getenv("DB_NAME"),
+#        user=os.getenv("DB_USER"),
+#        password=os.getenv("DB_PASS")
+#    )
+#
+# 3. Criar tabela de pedidos (se nao existir):
+#    CREATE TABLE IF NOT EXISTS pedidos (
+#        id SERIAL PRIMARY KEY,
+#        cliente VARCHAR(100),
+#        total DECIMAL(10,2),
+#        status VARCHAR(20),
+#        criado_em TIMESTAMP DEFAULT NOW()
+#    );
+#
+# 4. ATUALIZAR endpoints para usar o banco:
+#
+#    GET  /api/pedidos        -> SELECT * FROM pedidos
+#    GET  /api/pedidos/:id    -> SELECT * FROM pedidos WHERE id=:id
+#    POST /api/checkout       -> INSERT INTO pedidos (cliente, total, status) VALUES (:cliente, :total, 'criado')
+#
+# 5. Criar endpoint para popular dados de teste:
+#    POST /api/seed?quantidade=100
+#    -> Insere N pedidos aleatorios no banco
+#
+# 6. Beneficio para Observabilidade:
+#    - Traces vao mostrar spans do banco (SELECT, INSERT)
+#    - Logs vao mostrar queries executadas
+#    - Metricas de latencia do banco via OTel
+#    - Dashboard pode mostrar total de pedidos, pedidos/dia, etc
+# ================================================================
 ---
 apiVersion: v1
 kind: ConfigMap
