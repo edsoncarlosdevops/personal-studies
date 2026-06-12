@@ -2,18 +2,38 @@
 # =====================================================================
 # Prometheus coleta metricas via scraping HTTP e armazena em TSDB.
 #
-# Targets configurados (apenas os essenciais para t3.medium):
-# - prometheus (localhost:9090): metricas do proprio Prometheus
-# - opentelemetry-collector (:8889): endpoint de export do Collector
-# - kubernetes-nodes: CPU/memoria dos EC2 (util para lab)
-# - kubernetes-nodes-cadvisor: CPU/memoria por container (util para lab)
+# [ATENCAO] TARGETS DE SCRAPING
+# Abaixo a lista de todos os targets possiveis com importancia e custo.
+# Mantemos apenas os essenciais para nao sobrecarregar o t3.medium.
 #
-# Targets desabilitados para economizar recursos:
-# - kubernetes-apiservers: metricas do API Server (relevante em producao)
-# - kubernetes-pods: so rasga se tiver annotation (nao temos)
-# - kubernetes-service-endpoints: so rasga se tiver annotation
-# - prometheus-pushgateway: nao usamos pushgateway
-# - kubernetes-ingress: nao temos ingresses com metricas
+# TARGETS ATIVOS:
+# 1. prometheus (localhost:9090) - ESSENCIAL: metricas do proprio servico
+# 2. opentelemetry-collector (:8889) - ESSENCIAL: metricas via SDK OTel
+#
+# TARGETS OPCIONAIS (comente se quiser ativar):
+# 3. kubernetes-nodes (:10250) - RECOMENDADO: CPU/memoria dos EC2 nodes
+#    Ex: node_cpu_seconds_total, node_memory_MemFree_bytes
+#    Custo: +3 targets (um por node). Consome ~10% mais recursos.
+# 4. kubernetes-nodes-cadvisor (:10250/cadvisor) - RECOMENDADO:
+#    Metricas de containers individuais (CPU/memoria por pod)
+#    Ex: container_cpu_usage_seconds_total, container_memory_working_set_bytes
+#    Custo: +3 targets. Consome ~15% mais recursos.
+# 5. kubernetes-apiservers (:443) - BAIXA: So relevante se estiver
+#    debugando o API Server do K8s. Ex: apiserver_request_duration_seconds
+#    Custo: +2 targets. Consome ~5% mais recursos.
+# 6. kubernetes-pods (annotation) - BAIXA: So rasga se o pod tiver
+#    a annotation 'prometheus.io/scrape=true'. Nenhum pod nosso tem.
+#    Custo: 0 (so existe quando um pod pede).
+# 7. kubernetes-service-endpoints (annotation) - BAIXA: Mesma logica
+#    dos pods, mas para services. Nenhum service nosso tem.
+#    Custo: 0 (so existe quando um service pede).
+# 8. prometheus-pushgateway (:9091) - NENHUMA: Para metricas push.
+#    Nao usamos push model, apenas pull. Manter desligado.
+# 9. kubernetes-ingress (:10254) - BAIXA: Para ingresses com NGINX.
+#    Nao temos ingress configurado. Custo: 0.
+#
+# RECOMENDACAO: Em lab, manter apenas 1+2. Se quiser monitorar
+# recursos do cluster, ativar 3 e 4. O restante so em producao.
 
 # Desabilita componentes anexos
 alertmanager:
@@ -21,7 +41,8 @@ alertmanager:
 pushgateway:
   enabled: false
 nodeExporter:
-  enabled: true
+  enabled: false  # [ATENCAO] nodeExporter desligado porque usamos
+                  # o proxy do Kubernetes para acessar metricas dos nodes
 kubeStateMetrics:
   enabled: false
 
@@ -47,36 +68,81 @@ server:
     create: true
     name: prometheus-server
 
-  # [ATENCAO] Desabilitar scrapers automaticos do Kubernetes
-  # O chart do Prometheus ativa varios jobs de descoberta automatica.
-  # Para t3.medium, manter apenas nodes e cadvisor (uteis para lab).
-  # 
-  # Valores possiveis: true = habilita, false = desabilita
-  enableServiceLinks: false
-  
-  # Descoberta automatica de alvos
-  automountServiceAccountToken: true
-
-  # Jobs de scraping automatico do Kubernetes
-  # kubernetes_apiservers: false desabilita scraping do API Server
-  # kubernetes_nodes: true mantem metricas dos nodes
-  # kubernetes_service_endpoints: false (nao temos services com metricas)
-  # kubernetes_pods: false (nao temos pods com annotations)
-  
-# Configuracoes adicionais via raw YAML
-# Os scraps do Kubernetes sao controlados por configs internas do chart
-# que nao sao expostas via values. Vamos usar serverFiles para sobrescrever.
+# [ATENCAO] Configuracao de scraping via serverFiles
+# O serverFiles sobrescreve a configuracao padrao do Prometheus.
+# Aqui definimos manualmente apenas os targets que queremos.
+#
+# Para ATIVAR targets de Kubernetes (nodes, cadvisor, apiservers, etc),
+# descomente os blocos abaixo.
 serverFiles:
   prometheus.yml:
     scrape_configs:
-      # Apenas Prometheus e OTEL Collector
+      # --- TARGET 1: Prometheus (ESSENCIAL) ---
       - job_name: prometheus
         static_configs:
           - targets:
             - localhost:9090
-      
+
+      # --- TARGET 2: OTEL Collector (ESSENCIAL) ---
       - job_name: opentelemetry-collector
         scrape_interval: 15s
         static_configs:
           - targets:
             - opentelemetry-collector.monitoring.svc.cluster.local:8889
+
+      # --- TARGET 3: Nodes do Kubernetes (OPCIONAL) ---
+      # Descomente para monitorar CPU/memoria dos EC2 nodes
+      # Ex de metricas: node_cpu_seconds_total, node_memory_MemFree_bytes
+      # - job_name: kubernetes-nodes
+      #   scrape_interval: 15s
+      #   scheme: https
+      #   tls_config:
+      #     ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+      #     insecure_skip_verify: true
+      #   authorization:
+      #     credentials_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+      #   kubernetes_sd_configs:
+      #   - role: node
+      #   relabel_configs:
+      #   - action: labelmap
+      #     regex: __meta_kubernetes_node_label_(.+)
+      #   - replacement: /api/v1/nodes/$1/proxy/metrics
+      #     source_labels: [__meta_kubernetes_node_name]
+      #     target_label: __metrics_path__
+
+      # --- TARGET 4: Cadvisor (OPCIONAL) ---
+      # Descomente para ver CPU/memoria por container/pod
+      # Ex: container_cpu_usage_seconds_total, container_memory_working_set_bytes
+      # - job_name: kubernetes-nodes-cadvisor
+      #   scrape_interval: 15s
+      #   scheme: https
+      #   tls_config:
+      #     ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+      #     insecure_skip_verify: true
+      #   authorization:
+      #     credentials_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+      #   kubernetes_sd_configs:
+      #   - role: node
+      #   relabel_configs:
+      #   - action: labelmap
+      #     regex: __meta_kubernetes_node_label_(.+)
+      #   - replacement: /api/v1/nodes/$1/proxy/metrics/cadvisor
+      #     source_labels: [__meta_kubernetes_node_name]
+      #     target_label: __metrics_path__
+
+      # --- TARGET 5: API Server (BAIXA PRIORIDADE) ---
+      # So relevante se estiver debugando performance do K8s
+      # - job_name: kubernetes-apiservers
+      #   scrape_interval: 15s
+      #   scheme: https
+      #   tls_config:
+      #     ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+      #     insecure_skip_verify: false
+      #   authorization:
+      #     credentials_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+      #   kubernetes_sd_configs:
+      #   - role: endpoints
+      #   relabel_configs:
+      #   - source_labels: [__meta_kubernetes_namespace, __meta_kubernetes_service_name, __meta_kubernetes_endpoint_port_name]
+      #     regex: default;kubernetes;https
+      #     action: keep
