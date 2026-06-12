@@ -12,6 +12,7 @@ resource "helm_release" "prometheus" {
   version          = var.prometheus_chart_version
   repository       = var.prometheus_repository_url
   force_update     = true
+  upgrade_install  = true
   atomic           = true
   cleanup_on_fail  = true
 

@@ -16,6 +16,9 @@
 
 replicaCount: ${grafana_replica_count}
 
+# Senha fixa para ambiente dev/lab
+adminPassword: admin
+
 resources:
   limits:
     cpu: 500m

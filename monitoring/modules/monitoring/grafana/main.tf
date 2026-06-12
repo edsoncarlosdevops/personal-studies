@@ -10,6 +10,9 @@ resource "helm_release" "grafana" {
   namespace        = var.grafana_namespace
   version          = var.grafana_chart_version
   repository       = var.grafana_repository_url
+  force_update     = true
+  cleanup_on_fail  = true
+  upgrade_install  = true
   values           = [data.template_file.values.rendered]
 }
 
