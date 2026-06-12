@@ -6,7 +6,7 @@
 #
 # Pre-requisito: O recurso Instrumentation (python-instrumentation)
 # precisa existir no mesmo namespace. Ele e gerenciado pelo modulo:
-#   monitoring/modules/monitoring/opentelemetry-operator/manifests/
+#   monitoring/modules/monitoring/opentelemetry-operator/config/
 #
 # Annotation chave:
 #   instrumentation.opentelemetry.io/inject-python: "true"
@@ -14,7 +14,6 @@
 # que captura traces automaticamente do Flask - sem modificar codigo.
 #
 # Para testar:
-#   kubectl apply -k monitoring/tests/apps
 #   ./monitoring/tests/setup-lab.sh
 # =====================================================================
 ---

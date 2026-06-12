@@ -4,9 +4,10 @@
 # =====================================================================
 # Script automatizado que:
 #   1. Cria namespace otel-test
-#   2. Aplica os manifests do OTEL Operator (sidecar + instrumentation)
-#      que estao em: monitoring/modules/monitoring/opentelemetry-operator/config/
-#   3. Sobe apps de exemplo (api-pedidos + nginx-sidecar)
+#   2. Aplica os manifests do OTEL Operator (OpenTelemetryCollector +
+#      Instrumentation Python) que estao em:
+#      monitoring/modules/monitoring/opentelemetry-operator/config/
+#   3. Sobe app de exemplo (api-pedidos com auto-instrumentation)
 #   4. Gera trafego HTTP automaticamente
 #   5. Verifica traces no Tempo
 #
@@ -20,14 +21,13 @@
 # Estrutura de diretorios:
 #   monitoring/
 #     modules/monitoring/opentelemetry-operator/
-#       manifests/                         <- Recursos do Operator (CRDs)
+#       config/                            <- Recursos do Operator (CRDs)
 #         otel-sidecar.yaml
 #         python-instrumentation.yaml
 #     tests/
 #       setup-lab.sh                       <- Script de automacao
 #       apps/                              <- Apps de exemplo para teste
 #         api-pedidos.yaml
-#         nginx-sidecar.yaml
 # =====================================================================
 
 set -e
@@ -73,18 +73,13 @@ kubectl get instrumentation -n $NAMESPACE
 # Passo 4: Sobe as aplicacoes de exemplo
 # -----------------------------------------------------------------
 echo ""
-echo "[5/6] Subindo aplicacoes de exemplo..."
+echo "[5/6] Subindo aplicacao de exemplo..."
 kubectl apply -f $SCRIPT_DIR/$APPS_DIR/api-pedidos.yaml
-kubectl apply -f $SCRIPT_DIR/$APPS_DIR/nginx-sidecar.yaml
 
 echo ""
-echo "Aguardando pods ficarem prontos..."
+echo "Aguardando pod ficar pronto..."
 echo "  - api-pedidos (auto-instrumentation Python)..."
 kubectl wait --for=condition=ready pod -n $NAMESPACE -l app=api-pedidos --timeout=120s 2>/dev/null || \
-  echo "    TIMEOUT - verifique manualmente com: kubectl get pods -n $NAMESPACE"
-
-echo "  - nginx-sidecar..."
-kubectl wait --for=condition=ready pod -n $NAMESPACE -l app=nginx-sidecar --timeout=60s 2>/dev/null || \
   echo "    TIMEOUT - verifique manualmente com: kubectl get pods -n $NAMESPACE"
 
 echo ""
@@ -105,13 +100,6 @@ for i in $(seq 1 10); do
   kubectl exec -n monitoring deployment/grafana -- sh -c \
     "curl -s --connect-timeout 3 -X POST http://api-pedidos.$NAMESPACE.svc.cluster.local:5000/api/checkout \
       -H 'Content-Type: application/json' -d '{\"cliente\":\"Maria\"}' >/dev/null" 2>/dev/null
-  sleep 0.3
-done
-
-echo "  - Nginx..."
-for i in $(seq 1 5); do
-  kubectl exec -n monitoring deployment/grafana -- sh -c \
-    "curl -s --connect-timeout 3 http://nginx-sidecar.$NAMESPACE.svc.cluster.local:80 >/dev/null" 2>/dev/null
   sleep 0.3
 done
 
