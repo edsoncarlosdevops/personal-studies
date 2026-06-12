@@ -2,29 +2,16 @@
 # =====================================================================
 # Prometheus coleta metricas via scraping HTTP e armazena em TSDB.
 #
-# [ATENCAO] TARGETS DE SCRAPING
-# Usamos extraScrapeConfigs para ADICIONAR targets customizados sem
-# substituir os targets que o chart ja configura (API Server, nodes,
-# node-exporter, etc).
-#
-# TARGETS FORNECIDOS PELO CHART:
-# 1. prometheus (localhost:9090) - ESSENCIAL
-# 2. kubernetes-apiservers - API Server K8s
-# 3. kubernetes-nodes/node-exporter - Nodes via node-exporter (:9100)
-#    [ATENCAO] O chart cria automaticamente o target do node-exporter
-#    quando o subchart prometheus-node-exporter: enabled: true
-#
-# TARGETS CUSTOMIZADOS (extraScrapeConfigs):
-# 4. opentelemetry-collector (:8889) - ESSENCIAL
+# Targets ativos (apenas os essenciais):
+# 1. prometheus (localhost:9090) - metricas do proprio servico
+# 2. opentelemetry-collector (:8889) - metricas via SDK OTel
+# 3. kubernetes-nodes (node-exporter :9100) - CPU/memoria dos EC2
 
 alertmanager:
   enabled: false
 pushgateway:
   enabled: false
 
-# [ATENCAO] Habilita node-exporter como DaemonSet
-# Instala um pod em cada node expondo metricas do SO na porta 9100.
-# O chart do Prometheus cria automaticamente o scrape config.
 prometheus-node-exporter:
   enabled: true
 
@@ -49,11 +36,28 @@ server:
     create: true
     name: prometheus-server
 
-# [ATENCAO] extraScrapeConfigs ADICIONA targets sem substituir os
-# existentes. Use isso para targets customizados como o OTEL Collector.
-extraScrapeConfigs: |
-  - job_name: opentelemetry-collector
-    scrape_interval: 15s
-    static_configs:
-      - targets:
-        - opentelemetry-collector.monitoring.svc.cluster.local:8889
+# [ATENCAO] serverFiles sobrescreve TODA a config do Prometheus.
+serverFiles:
+  prometheus.yml:
+    scrape_configs:
+      # --- TARGET 1: Proprio Prometheus ---
+      - job_name: prometheus
+        static_configs:
+          - targets:
+            - localhost:9090
+
+      # --- TARGET 2: OTEL Collector (metricas da app) ---
+      - job_name: opentelemetry-collector
+        scrape_interval: 15s
+        static_configs:
+          - targets:
+            - opentelemetry-collector.monitoring.svc.cluster.local:8889
+
+      # --- TARGET 3: Nodes via node-exporter ---
+      # 3 nodes EC2 t3.medium, cada um com node-exporter na porta 9100
+      - job_name: kubernetes-nodes
+        scrape_interval: 15s
+        scheme: http
+        static_configs:
+          - targets:
+            - prometheus-prometheus-node-exporter.monitoring.svc.cluster.local:9100
