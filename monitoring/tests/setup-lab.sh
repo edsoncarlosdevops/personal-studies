@@ -5,7 +5,7 @@
 # Script automatizado que:
 #   1. Cria namespace otel-test
 #   2. Aplica os manifests do OTEL Operator (sidecar + instrumentation)
-#      que estao em: monitoring/modules/monitoring/opentelemetry-operator/config/manifests/
+#      que estao em: monitoring/modules/monitoring/opentelemetry-operator/config/
 #   3. Sobe apps de exemplo (api-pedidos + nginx-sidecar)
 #   4. Gera trafego HTTP automaticamente
 #   5. Verifica traces no Tempo
@@ -34,7 +34,7 @@ set -e
 
 NAMESPACE="otel-test"
 # Caminho relativo para os manifests do Operator e apps de teste
-OPERATOR_MANIFESTS="../modules/monitoring/opentelemetry-operator/config/manifests"
+OPERATOR_MANIFESTS="../modules/monitoring/opentelemetry-operator/config"
 APPS_DIR="apps"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
