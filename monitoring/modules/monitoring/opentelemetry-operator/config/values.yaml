@@ -1,39 +1,17 @@
+# OpenTelemetry Operator - Configuration System (Production Ready)
 # =====================================================================
-# 🛠️ OpenTelemetry Operator - Configuration System (Production Ready)
-# =====================================================================
-# O Operator gerencia o ciclo de vida dos coletores (OpenTelemetryCollector)
-# e automatiza a instrumentação das aplicações (Auto-Instrumentation)
-# injetando agentes OTel nos containers de forma transparente.
-# =====================================================================
+# O OpenTelemetry Operator gerencia automaticamente a injecao de
+# agentes OTel nos Pods atraves de annotations, sem modificar
+# o codigo das aplicacoes.
 
-# Quantidade de réplicas do controller do Operator
-replicaCount: ${otel_operator_replica_count}
+replicaCount: 1
 
 manager:
   collectorImage:
-    # Imagem padrão usada para instanciar Coletores do OTel via CRDs
     repository: otel/opentelemetry-collector-contrib
     tag: 0.112.0
-  
-  # Alocação de recursos para o pod do Operator Controller
-  resources:
-    limits:
-      cpu: 200m
-      memory: 256Mi
-    requests:
-      cpu: 50m
-      memory: 64Mi
 
-# kubeRBACProxy protege os endpoints de métricas do próprio Operator
-kubeRBACProxy:
-  enabled: true
-
-# 🔹 [PRODUÇÃO] EXEMPLO: Habilitar Webhooks de Admissão
-# Os webhooks são fundamentais para que o Operator intercepte os pods criados
-# e injete a instrumentação automática (Auto-Instrumentation).
-# admissionWebhooks:
-#   enabled: true
-#   certManager:
-#     enabled: true # Usa o cert-manager (que você tem no projeto!) para gerar os certificados TLS dos webhooks
-
-
+  env:
+    # Habilita auto-instrumentacao (injeta agent OTel em Pods com annotations)
+    - name: ENABLE_WEBHOOKS
+      value: "true"

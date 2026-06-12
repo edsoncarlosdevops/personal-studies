@@ -1,34 +1,21 @@
-# ═══════════════════════════════════════════════════════════
 # Prometheus - Values para Helm Chart
-# ═══════════════════════════════════════════════════════════
-#
-# ATENÇÃO: StorageClass no EKS
-# - O EKS usa "gp2" como storageClass padrão (não "standard")
-# - O storageClass gp2 tem volumeBindingMode: WaitForFirstConsumer
-#   Isso significa que o PV só é criado quando um Pod realmente
-#   utiliza o PVC, o que pode causar delays no scheduling
-# - Para labs, é mais prático desabilitar persistência
+# =====================================================================
+# Prometheus e o sistema padrao de monitoramento e alerta do ecossistema
+# CNCF. Coleta metricas via scraping HTTP e armazena em formato TSDB.
 
-# Desabilitando componentes extras para economizar recursos no EKS
+# Desabilita componentes que nao vamos usar no lab
 alertmanager:
-  enabled: false
+  enabled: false # Ja temos um Alertmanager separado
 
-prometheus-pushgateway:
-  enabled: false
-
-prometheus-node-exporter:
-  enabled: false
-
-kube-state-metrics:
-  enabled: false
-
+# Configuracao do servidor Prometheus
 server:
-  retention: "5d"
-  replicaCount: ${prometheus_replica_count}
-  persistentVolume:
-    enabled: false # Desabilitado para lab (EKS t3.medium), sem necessidade de persistência
-  
-  # Recursos ajustados para EKS (t3.medium - 2 vCPU, 4GB RAM)
+  name: server
+  # Configuracoes globais de scraping
+  global:
+    scrape_interval: 15s
+    evaluation_interval: 15s
+
+  # Recursos do servidor
   resources:
     limits:
       cpu: 500m
@@ -37,10 +24,11 @@ server:
       cpu: 100m
       memory: 256Mi
 
-serverFiles:
-  prometheus.yml:
-    scrape_configs:
-      - job_name: prometheus
-        static_configs:
-          - targets:
-            - localhost:9090
+  # Persistencia opcional (desabilitada para lab)
+  persistentVolume:
+    enabled: false
+
+  # Service account com permissoes para scrap de metricas do K8s
+  serviceAccount:
+    create: true
+    name: prometheus-server

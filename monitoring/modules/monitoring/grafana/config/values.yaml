@@ -1,4 +1,10 @@
 # Grafana Helm Chart Configuration
+# =====================================================================
+# [ATENCAO] ATENÇÃO: Portas dos Datasources
+# Cada servico expoe portas especificas para diferentes propositos
+# (ingestao vs consulta). Configurar a porta errada causa
+# "Bad Gateway" ou "Connection Refused" no Grafana.
+# =====================================================================
 replicaCount: ${grafana_replica_count}
 
 resources:
@@ -22,6 +28,7 @@ datasources:
       - name: Prometheus
         type: prometheus
         access: proxy
+        # Porta 80 = service do Prometheus Server (container expoe 9090, service mapeia pra 80)
         url: http://prometheus-server:80
         isDefault: true
         jsonData:
@@ -30,6 +37,8 @@ datasources:
       - name: Loki
         type: loki
         access: proxy
+        # Porta 3100 = http_listen_port padrao do Loki para queries HTTP (API de logs)
+        # Nao confundir com porta 9095 (gRPC interno) ou 9096 (HTTP interno)
         url: http://loki:3100
         jsonData:
           timeout: 60
@@ -38,6 +47,11 @@ datasources:
       - name: Tempo
         type: tempo
         access: proxy
-        url: http://tempo:3200
+        # [ATENCAO] PORTAS CRITICAS DO TEMPO:
+        # - 3100: http_listen_port (API de consulta de traces - usada pelo Grafana)
+        # - 4317: OTLP gRPC (ingestao de traces, nao para consultas)
+        # - 4318: OTLP HTTP (ingestao de traces, nao para consultas)
+        # - 3200: NAO EXISTE (causa Bad Gateway se configurado)
+        url: http://tempo:3100
         jsonData:
           traces: true

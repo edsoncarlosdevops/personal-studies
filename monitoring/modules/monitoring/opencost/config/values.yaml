@@ -1,25 +1,22 @@
+# OpenCost - Monitoramento de Custos Kubernetes
+# =====================================================================
+# OpenCost calcula o custo de cada workload no cluster baseado
+# no consumo de CPU, memoria, storage e trafego de rede.
+
 opencost:
   exporter:
     defaultClusterId: ${opencost_cluster_id}
-    replicas: ${opencost_replica_count}
-    resources:
-      requests:
-        cpu: "${jsondecode(opencost_resources_config).requests.cpu}"
-        memory: "${jsondecode(opencost_resources_config).requests.memory}"
-      limits:
-        cpu: "${jsondecode(opencost_resources_config).limits.cpu}"
-        memory: "${jsondecode(opencost_resources_config).limits.memory}"
+    extraEnv:
+      - name: CLOUD_PROVIDER_API_KEY
+        value: "" # Deixar vazio para ambiente lab (calcula precos basedos em on-prem)
 
-  # Configuração Principal: Apontar para o Prometheus existente
   prometheus:
-    external:
-      enabled: true
-      url: ${opencost_prometheus_address}
+    # URL interna do Prometheus Server no cluster
     internal:
-      enabled: false # Não queremos que o OpenCost suba um Prometheus dele
+      serviceName: prometheus-server
+      namespaceName: monitoring
+      port: 80
 
-  ui:
-    enabled: true
-    # Habilitar Ingress simples se quiser, ou usar port-forward
-    ingress:
-      enabled: false
+  metrics:
+    # A cada 30s o OpenCost coleta dados de utilizacao do Prometheus
+    scrapeInterval: 30s

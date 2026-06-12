@@ -1,20 +1,31 @@
+# OpenTelemetry Collector - Configuration System
 # =====================================================================
-# 🛠️ OpenTelemetry Collector - Configuration System (Production Ready)
-# =====================================================================
-# O Collector é um agente/proxy que recebe, processa e exporta dados
-# de telemetria (Traces, Metrics, Logs). Nesta configuração padrão, ele
+# O Collector e um agente/proxy que recebe, processa e exporta dados
+# de telemetria (Traces, Metrics, Logs). Nesta configuracao padrao, ele
 # roda em modo "deployment" (centralizado), recebendo OTLP e entregando
-# traces para o Tempo e métricas para o Prometheus.
+# traces para o Tempo e metricas para o Prometheus.
 # =====================================================================
+#
+# [ATENCAO] PORTAS DO OTEL COLLECTOR:
+# - 4317: OTLP gRPC (ingestao de traces/metricas/logs via protocolo OTel)
+# - 4318: OTLP HTTP (ingestao de traces/metricas/logs via HTTP)
+# - 8888: Metricas internas do proprio Collector (para Prometheus scrap)
+# - 8889: Endpoint Prometheus exporter (para o Prometheus raspar metricas processadas)
+# - 55680: OTLP legacy (apenas compatibilidade reversa)
+#
+# [ATENCAO] DIFERENCA CRITICA: Tempo x OTEL Collector
+# O Tempo RECEBE dados na porta 4317 (OTLP gRPC) - mesma do Collector
+# Mas o Tempo CONSULTA dados na porta 3100 (HTTP API)
+# O Collector nunca e usado para consulta, apenas para ingestao
 
-# Réplicas da instância do Collector centralizado.
-# Em produção, esse valor pode subir conforme o volume de ingestão de dados.
+# Replicas da instancia do Collector centralizado.
+# Em producao, esse valor pode subir conforme o volume de injecao de dados.
 replicaCount: ${otel_collector_replica_count}
 
 # O modo "deployment" executa o Collector como um Deploy do Kubernetes.
-# Outras opções comuns:
-# - daemonset: executa um pod por Node (bom para coletar logs/métricas do Host)
-# - statefulset: executa pods com identidades persistentes (bom para escalonamento com persistência)
+# Outras opcoes comuns:
+# - daemonset: executa um pod por Node (bom para coletar logs/metricas do Host)
+# - statefulset: executa pods com identidades persistentes (bom para escalonamento com persistencia)
 mode: deployment
 
 image:
@@ -22,140 +33,77 @@ image:
   repository: otel/opentelemetry-collector-contrib
   tag: 0.112.0
 
-# ⚙️ Estrutura Principal de Configuração do OpenTelemetry Collector
-# Ela é dividida em: receivers, processors, exporters e service.
+# Estrutura Principal de Configuracao do OpenTelemetry Collector
+# Ela e dividida em: receivers, processors, exporters e service.
 config:
-  # -----------------------------------------------------------------
-  # 📥 RECEIVERS: Como o Collector recebe dados das aplicações
-  # -----------------------------------------------------------------
+  # --
+  # RECEIVERS: Como o Collector recebe dados das aplicacoes
+  # --
   receivers:
-    # OTLP (OpenTelemetry Protocol): Padrão de indústria gRPC e HTTP.
+    # OTLP (OpenTelemetry Protocol): Padrao de industria gRPC e HTTP.
     otlp:
       protocols:
         grpc:
-          endpoint: 0.0.0.0:4317 # Porta padrão gRPC para receber dados de bibliotecas OTel
+          endpoint: 0.0.0.0:4317 # Porta padrao gRPC para receber dados de bibliotecas OTel
         http:
-          endpoint: 0.0.0.0:4318 # Porta padrão HTTP para receber payloads JSON/protobuf
+          endpoint: 0.0.0.0:4318 # Porta padrao HTTP para receber payloads JSON/protobuf
 
-    # 🔹 [PRODUÇÃO] EXEMPLO: Receptor Prometheus Receiver (Self-Scraping ou scraping externo)
-    # prometheus:
-    #   config:
-    #     scrape_configs:
-    #       - job_name: 'otel-collector'
-    #         scrape_interval: 15s
-    #         static_configs:
-    #           - targets: ['0.0.0.0:8888'] # Coleta métricas de saúde do próprio Collector
-
-    # 🔹 [PRODUÇÃO] EXEMPLO: Receptor Kubelet Stats (Métricas de containers/pods diretamente do node)
-    # kubeletstats:
-    #   endpoint: https://$${env:KUBE_NODE_NAME}:10250
-    #   auth_type: serviceAccount
-    #   insecure_skip_verify: true
-    #   collection_interval: 15s
-    #   metric_groups:
-    #     - container
-    #     - pod
-    #     - node
-
-  # -----------------------------------------------------------------
-  # ⚙️ PROCESSORS: Como o Collector trata, enriquece ou limpa os dados
-  # -----------------------------------------------------------------
+  # --
+  # PROCESSORS: Como o Collector trata, enriquece ou limpa os dados
+  # --
   processors:
-    # O batch processor agrupa os dados antes de enviá-los (reduz chamadas de rede e overhead)
+    # O batch processor agrupa os dados antes de envia-los (reduz chamadas de rede e overhead)
     batch:
-      timeout: 5s              # Tempo máximo de espera antes de forçar o envio de um lote
+      timeout: 5s              # Tempo maximo de espera antes de forcar o envio de um lote
       send_batch_size: 1024    # Quantidade ideal de itens por lote
-       # Gatilho para enviar antes do timeout se o lote for grande
 
-    # 🔹 [PRODUÇÃO] IMPORTANTÍSSIMO: Memory Limiter (Evita crash por OOM - Out Of Memory)
-    # memory_limiter:
-    #   check_interval: 1s       # Frequência de checagem do uso de memória
-    #   limit_percentage: 80     # Limite máximo de memória do container (se bater aqui, começa a dropar)
-    #   spike_limit_percentage: 20 # Tolerância para picos repentinos de memória
-
-    # 🔹 [PRODUÇÃO] IMPORTANTÍSSIMO: K8s Attributes (Adiciona metadata dos Pods e Namespaces)
-    # k8sattributes:
-    #   auth_type: "serviceAccount"
-    #   passthrough: false
-    #   filter:
-    #     node_from_env_var: KUBE_NODE_NAME
-    #   extract:
-    #     metadata:
-    #       - k8s.pod.name
-    #       - k8s.pod.uid
-    #       - k8s.namespace.name
-    #       - k8s.node.name
-    #       - k8s.deployment.name
-    #       - k8s.statefulset.name
-    #       - k8s.daemonset.name
-    #       - k8s.cronjob.name
-    #       - k8s.job.name
-    #   pod_association:
-    #     - sources:
-    #         - from: connection # Associa o IP do remetente de rede ao pod correspondente no K8s
-
-    # 🔹 [PRODUÇÃO] EXEMPLO: Resource Detection (Identifica que está rodando no EKS/AWS)
-    # resourcedetection:
-    #   detectors: [env, ec2, eks] # Detecta variáveis de ambiente, metadados de EC2 e informações do EKS
-    #   timeout: 2s
-    #   override: false
-
-  # -----------------------------------------------------------------
-  # 📤 EXPORTERS: Para onde o Collector envia os dados processados
-  # -----------------------------------------------------------------
+  # --
+  # EXPORTERS: Para onde o Collector envia os dados processados
+  # --
   exporters:
-    # Envia traces via protocolo OTLP para o Tempo (observabilidade de tracing)
+    # Envia traces via protocolo OTLP para o Tempo
+    # [ATENCAO] Porta 4317 = OTLP gRPC do Tempo (ingestao de traces)
+    # Nao confundir com porta 3100 (consulta HTTP, nao usada pelo Collector)
     otlp:
       endpoint: "tempo.monitoring.svc.cluster.local:4317"
       tls:
-        insecure: true # Comunicação HTTP dentro do cluster (sem SSL)
+        insecure: true # Comunicacao HTTP dentro do cluster (sem SSL)
       sending_queue:
         enabled: true
         num_consumers: 4
-        queue_size: 1000 # Fila de buffer interna caso o backend fique temporariamente indisponível
+        queue_size: 1000 # Fila de buffer interna caso o backend fique temporariamente indisponivel
 
-    # Expõe um endpoint Prometheus para raspagem (Scraping) externa
+    # Expoe um endpoint Prometheus para raspagem (Scraping) externa
     prometheus:
       endpoint: "0.0.0.0:8889"
       resource_to_telemetry_conversion:
         enabled: true # Converte atributos de recursos do OTel para labels do Prometheus
 
-    # 🔹 [PRODUÇÃO] EXEMPLO: Prometheus Remote Write (Envia direto para Grafana Cloud ou AWS Managed Prometheus)
-    # prometheusremotewrite:
-    #   endpoint: "https://prometheus-us-east-1.amazonaws.com/workspaces/ws-xxx/api/v1/remote_write"
-    #   auth:
-    #     authenticator: sigv4 # Autenticação nativa da AWS usando IAM Roles for Service Accounts (IRSA)
-    #   tls:
-    #     insecure: false
-
-  # -----------------------------------------------------------------
-  # 🔗 SERVICE: Conecta os componentes acima através de pipelines
-  # -----------------------------------------------------------------
+  # --
+  # SERVICE: Conecta os componentes acima atraves de pipelines
+  # --
   service:
     pipelines:
       # Pipeline de Tracing
       traces:
         receivers: [otlp]
-        # [PRODUÇÃO] Sugestão: processors: [memory_limiter, k8sattributes, resourcedetection, batch]
         processors: [batch]
         exporters: [otlp]
 
-      # Pipeline de Métricas
+      # Pipeline de Metricas
       metrics:
         receivers: [otlp]
-        # [PRODUÇÃO] Sugestão: processors: [memory_limiter, k8sattributes, resourcedetection, batch]
         processors: [batch]
         exporters: [prometheus]
 
-    # Habilita telemetria interna (métricas e logs do próprio Collector)
+    # Habilita telemetria interna (metricas e logs do proprio Collector)
     telemetry:
       logs:
         level: "info"
       metrics:
-        address: "0.0.0.0:8888" # Expõe porta 8888 para o Prometheus raspar as métricas do Collector
+        address: "0.0.0.0:8888" # Expoe porta 8888 para o Prometheus raspar as metricas do Collector
 
 # Dimensionamento do recurso para o pod do Collector.
-# Modifique conforme o volume de tráfego de produção.
 resources:
   limits:
     cpu: 500m
@@ -163,5 +111,3 @@ resources:
   requests:
     cpu: 100m
     memory: 128Mi
-
-

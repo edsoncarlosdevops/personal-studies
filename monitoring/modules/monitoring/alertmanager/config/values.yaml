@@ -1,3 +1,7 @@
+# Alertmanager - Values para Helm Chart
+# =====================================================================
+# O Alertmanager gerencia alertas enviados pelo Prometheus.
+# Ele faz deduplicacao, grouping, silenciamento e roteamento.
 replicaCount: 1
 
 resources:
@@ -9,4 +13,4 @@ resources:
     memory: 32Mi
 
 persistence:
-  enabled: false # Para lab local, persistência no alertmanager raramente é crítica
+  enabled: false # Para lab local, persistencia no alertmanager raramente e critica
