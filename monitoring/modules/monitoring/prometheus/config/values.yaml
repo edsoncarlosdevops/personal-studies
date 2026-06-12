@@ -3,32 +3,31 @@
 # Prometheus coleta metricas via scraping HTTP e armazena em TSDB.
 #
 # [ATENCAO] TARGETS DE SCRAPING
-# O chart do Prometheus ja configura varios targets automaticos do
-# Kubernetes, incluindo as permissoes RBAC necessarias. Usamos
-# extraScrapeConfigs para ADICIONAR targets customizados sem
-# substituir os existentes.
+# Usamos extraScrapeConfigs para ADICIONAR targets customizados sem
+# substituir os targets que o chart ja configura (API Server, nodes,
+# node-exporter, etc).
 #
-# Targets fornecidos pelo chart (automaticos):
-# 1. prometheus (localhost:9090) - ESSENCIAL: metricas do proprio servico
-# 2. kubernetes-apiservers - Metricas do API Server K8s
-# 3. kubernetes-nodes - CPU/memoria dos EC2 nodes (via kubelet proxy)
-# 4. kubernetes-nodes-cadvisor - CPU/memoria por container/pod
-# 5. kubernetes-pods - Pods com annotation prometheus.io/scrape=true
-# 6. kubernetes-service-endpoints - Services com annotation
-# 7. prometheus-pushgateway - Para push model (desligado)
+# TARGETS FORNECIDOS PELO CHART:
+# 1. prometheus (localhost:9090) - ESSENCIAL
+# 2. kubernetes-apiservers - API Server K8s
+# 3. kubernetes-nodes/node-exporter - Nodes via node-exporter (:9100)
+#    [ATENCAO] O chart cria automaticamente o target do node-exporter
+#    quando o subchart prometheus-node-exporter: enabled: true
 #
-# Targets customizados (via extraScrapeConfigs):
-# 8. opentelemetry-collector (:8889) - ESSENCIAL: metricas via SDK OTel
-#
-# Para desabilitar algum target automatico, use as flags abaixo.
+# TARGETS CUSTOMIZADOS (extraScrapeConfigs):
+# 4. opentelemetry-collector (:8889) - ESSENCIAL
 
-# Desabilita componentes anexos
 alertmanager:
   enabled: false
 pushgateway:
   enabled: false
-nodeExporter:
-  enabled: false  # Desligado porque usamos o kubelet proxy (target 3)
+
+# [ATENCAO] Habilita node-exporter como DaemonSet
+# Instala um pod em cada node expondo metricas do SO na porta 9100.
+# O chart do Prometheus cria automaticamente o scrape config.
+prometheus-node-exporter:
+  enabled: true
+
 kubeStateMetrics:
   enabled: false
 
@@ -50,8 +49,8 @@ server:
     create: true
     name: prometheus-server
 
-# [ATENCAO] extraScrapeConfigs - ADICIONA targets sem substituir os
-# existentes. Diferente do serverFiles que sobrescreve TUDO.
+# [ATENCAO] extraScrapeConfigs ADICIONA targets sem substituir os
+# existentes. Use isso para targets customizados como o OTEL Collector.
 extraScrapeConfigs: |
   - job_name: opentelemetry-collector
     scrape_interval: 15s
