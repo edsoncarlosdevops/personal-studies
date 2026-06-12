@@ -2,22 +2,26 @@
 # =====================================================================
 # Prometheus coleta metricas via scraping HTTP e armazena em TSDB.
 #
-# [ATENCAO] ALVOS DE SCRAPING:
-# O Prometheus so raspa targets listados em scrape_configs.
-# Se o target do OTEL Collector nao estiver configurado, as metricas
-# enviadas via SDK OTel nunca aparecem nas queries.
-#
-# Scrape configs definidos:
+# Targets configurados (apenas os essenciais para t3.medium):
 # - prometheus (localhost:9090): metricas do proprio Prometheus
 # - opentelemetry-collector (:8889): endpoint de export do Collector
+# - kubernetes-nodes: CPU/memoria dos EC2 (util para lab)
+# - kubernetes-nodes-cadvisor: CPU/memoria por container (util para lab)
+#
+# Targets desabilitados para economizar recursos:
+# - kubernetes-apiservers: metricas do API Server (relevante em producao)
+# - kubernetes-pods: so rasga se tiver annotation (nao temos)
+# - kubernetes-service-endpoints: so rasga se tiver annotation
+# - prometheus-pushgateway: nao usamos pushgateway
+# - kubernetes-ingress: nao temos ingresses com metricas
 
-# Desabilita componentes que nao vamos usar no lab
+# Desabilita componentes anexos
 alertmanager:
   enabled: false
 pushgateway:
   enabled: false
 nodeExporter:
-  enabled: false
+  enabled: true
 kubeStateMetrics:
   enabled: false
 
@@ -43,12 +47,36 @@ server:
     create: true
     name: prometheus-server
 
-# [ATENCAO] extraScrapeConfigs - Obrigatorio para raspar o OTEL Collector
-# Sem isso, metricas como http_requests_total nunca aparecem no Prometheus
-# O target aponta para o service do Collector na porta 8889 (prometheus-export)
-extraScrapeConfigs: |
-  - job_name: opentelemetry-collector
-    scrape_interval: 15s
-    static_configs:
-      - targets:
-        - opentelemetry-collector.monitoring.svc.cluster.local:8889
+  # [ATENCAO] Desabilitar scrapers automaticos do Kubernetes
+  # O chart do Prometheus ativa varios jobs de descoberta automatica.
+  # Para t3.medium, manter apenas nodes e cadvisor (uteis para lab).
+  # 
+  # Valores possiveis: true = habilita, false = desabilita
+  enableServiceLinks: false
+  
+  # Descoberta automatica de alvos
+  automountServiceAccountToken: true
+
+  # Jobs de scraping automatico do Kubernetes
+  # kubernetes_apiservers: false desabilita scraping do API Server
+  # kubernetes_nodes: true mantem metricas dos nodes
+  # kubernetes_service_endpoints: false (nao temos services com metricas)
+  # kubernetes_pods: false (nao temos pods com annotations)
+  
+# Configuracoes adicionais via raw YAML
+# Os scraps do Kubernetes sao controlados por configs internas do chart
+# que nao sao expostas via values. Vamos usar serverFiles para sobrescrever.
+serverFiles:
+  prometheus.yml:
+    scrape_configs:
+      # Apenas Prometheus e OTEL Collector
+      - job_name: prometheus
+        static_configs:
+          - targets:
+            - localhost:9090
+      
+      - job_name: opentelemetry-collector
+        scrape_interval: 15s
+        static_configs:
+          - targets:
+            - opentelemetry-collector.monitoring.svc.cluster.local:8889
