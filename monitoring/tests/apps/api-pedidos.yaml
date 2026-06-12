@@ -77,7 +77,7 @@ spec:
         # O Operator injeta init container que copia o agente OTel
         # e configura OTEL_EXPORTER_OTLP_ENDPOINT automaticamente.
         # Nao precisa modificar o Dockerfile nem o codigo.
-        instrumentation.opentelemetry.io/inject-python: "true"
+        instrumentation.opentelemetry.io/inject-python: "monitoring/python-instrumentation"
     spec:
       containers:
       - name: api

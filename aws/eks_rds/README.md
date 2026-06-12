@@ -61,6 +61,45 @@ Conta AWS com permissoes para criar VPC, EKS, RDS, EC2 e IAM.
 
 ---
 
+## Configurar kubectl (apos recriar o lab)
+
+Toda vez que o cluster EKS for recriado, voce precisa configurar o kubectl novamente:
+
+```bash
+# 1. Configurar AWS CLI (se necessario)
+aws configure
+#   AWS Access Key ID: <sua_key>
+#   AWS Secret Access Key: <sua_secret>
+#   Default region: us-east-1
+#   Default output: json
+
+# 2. Atualizar kubeconfig
+aws eks update-kubeconfig --region us-east-1 --name dev-eks-cluster
+
+# 3. Testar
+kubectl get nodes
+kubectl get pods -A
+```
+
+> O comando `aws eks update-kubeconfig` baixa automaticamente o certificado do cluster e gera um token JWT via IAM.  
+> Nao precisa baixar ou copiar kubeconfig manualmente.  
+> O token expira em 15 minutos, mas o kubectl renova automaticamente ao executar comandos.
+
+### Troubleshooting
+
+```bash
+# Erro: "Unable to connect to the server"
+# Verificar se o cluster esta ativo no Console AWS
+
+# Erro: "AWS CLI not configured"
+aws configure
+
+# Erro: "timeout" 
+# Verificar se o security group do EKS permite sua origem
+```
+
+---
+
 ## Infraestrutura Core (Terraform)
 
 ### Componentes
