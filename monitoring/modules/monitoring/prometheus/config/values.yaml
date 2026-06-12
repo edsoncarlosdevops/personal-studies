@@ -16,7 +16,7 @@ prometheus-node-exporter:
   enabled: true
 
 kubeStateMetrics:
-  enabled: false
+  enabled: true
 
 server:
   name: server
@@ -61,3 +61,10 @@ serverFiles:
         static_configs:
           - targets:
             - prometheus-prometheus-node-exporter.monitoring.svc.cluster.local:9100
+
+      # --- TARGET 4: kube-state-metrics (metricas de pods, deployments, etc) ---
+      - job_name: kube-state-metrics
+        scrape_interval: 15s
+        static_configs:
+          - targets:
+            - prometheus-kube-state-metrics.monitoring:8080
