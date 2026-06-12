@@ -1,0 +1,173 @@
+{
+  "dashboard": {
+    "title": "Stack de Observabilidade",
+    "tags": [
+      "observabilidade",
+      "otel",
+      "eks"
+    ],
+    "timezone": "browser",
+    "refresh": "30s",
+    "schemaVersion": 39,
+    "panels": [
+      {
+        "id": 1,
+        "title": "CPU por Namespace",
+        "type": "timeseries",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "PBFA97CFB590B2093"
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 0
+        },
+        "targets": [
+          {
+            "expr": "sum(rate(container_cpu_usage_seconds_total{container!=\"\"}[1m])) by (namespace)",
+            "legendFormat": "{{namespace}}"
+          }
+        ]
+      },
+      {
+        "id": 2,
+        "title": "Memory por Namespace",
+        "type": "timeseries",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "PBFA97CFB590B2093"
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 0
+        },
+        "targets": [
+          {
+            "expr": "sum(container_memory_working_set_bytes{container!=\"\"}) by (namespace)",
+            "legendFormat": "{{namespace}}"
+          }
+        ]
+      },
+      {
+        "id": 3,
+        "title": "Nodes - CPU (%)",
+        "type": "timeseries",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "PBFA97CFB590B2093"
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 8,
+          "x": 0,
+          "y": 8
+        },
+        "targets": [
+          {
+            "expr": "100 - (avg(rate(node_cpu_seconds_total{mode=\"idle\"}[1m])) by (instance) * 100)",
+            "legendFormat": "{{instance}}"
+          }
+        ]
+      },
+      {
+        "id": 4,
+        "title": "Nodes - Memory (%)",
+        "type": "timeseries",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "PBFA97CFB590B2093"
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 8,
+          "x": 8,
+          "y": 8
+        },
+        "targets": [
+          {
+            "expr": "(1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) * 100",
+            "legendFormat": "{{instance}}"
+          }
+        ]
+      },
+      {
+        "id": 5,
+        "title": "Nodes - Disk (%)",
+        "type": "timeseries",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "PBFA97CFB590B2093"
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 8,
+          "x": 16,
+          "y": 8
+        },
+        "targets": [
+          {
+            "expr": "(1 - node_filesystem_avail_bytes{mountpoint=\"/\"} / node_filesystem_size_bytes{mountpoint=\"/\"}) * 100",
+            "legendFormat": "{{instance}}"
+          }
+        ]
+      },
+      {
+        "id": 6,
+        "title": "Logs (Loki)",
+        "type": "logs",
+        "datasource": {
+          "type": "loki",
+          "uid": "P8E80F9AEF21F6940"
+        },
+        "gridPos": {
+          "h": 10,
+          "w": 24,
+          "x": 0,
+          "y": 16
+        },
+        "targets": [
+          {
+            "expr": "{namespace=~\"otel-test|monitoring\"}",
+            "limit": 50
+          }
+        ]
+      },
+      {
+        "id": 7,
+        "title": "Uptime dos Pods",
+        "type": "table",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "PBFA97CFB590B2093"
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 24,
+          "x": 0,
+          "y": 26
+        },
+        "targets": [
+          {
+            "expr": "time() - kube_pod_start_time",
+            "legendFormat": "{{pod}}",
+            "format": "table",
+            "instant": true
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "s",
+            "custom": {
+              "align": "left"
+            }
+          }
+        }
+      }
+    ]
+  },
+  "overwrite": true
+}
