@@ -3,14 +3,15 @@
 # O Collector recebe, processa e exporta dados de telemetria
 # (Traces, Metrics, Logs). Modo deployment (centralizado).
 #
-# [ATENCAO] PORTAS - Servico precisa expor estas portas no values.yaml
-# para o Prometheus conseguir raspar as metricas:
+# [ATENCAO] PORTAS:
 # - 4317: OTLP gRPC (ingestao de traces/metricas/logs)
 # - 4318: OTLP HTTP (ingestao alternativa via HTTP)
 # - 8888: Telemetria do proprio Collector (metricas internas)
-# - 8889: Endpoint Prometheus (exporter para o Prometheus raspar)
-# Sem essas portas no bloco "service.ports", o Prometheus nao consegue
-# acessar e o target fica "down".
+# - 8889: Endpoint Prometheus exporter (raspado pelo Prometheus)
+#
+# As portas 8888 e 8889 precisam ser adicionadas manualmente no service
+# do Kubernetes apos o deploy (kubectl patch svc), pois o chart Helm
+# do OTEL Collector nao suporta configuracao de portas no service.
 #
 # [ATENCAO] FLUXO DE DADOS:
 # App (OTel SDK) -> Collector (:4317 gRPC) -> Tempo (:4317) [traces]
@@ -52,7 +53,7 @@ config:
         queue_size: 1000
 
     # Exporta metricas em formato Prometheus (raspado pelo Prometheus)
-    # [ATENCAO] Esta porta (8889) precisa estar no "service.ports" abaixo
+    # Porta 8889 precisa estar exposta no service do Kubernetes
     prometheus:
       endpoint: "0.0.0.0:8889"
       resource_to_telemetry_conversion:
@@ -82,40 +83,3 @@ resources:
   requests:
     cpu: 100m
     memory: 128Mi
-
-# [ATENCAO] Portas do Service - SEM ISSO Prometheus nao consegue raspar
-# Lista todas as portas que o pod expoe para outros servicos acessarem
-service:
-  ports:
-  - name: otlp
-    port: 4317
-    targetPort: 4317
-    protocol: TCP
-  - name: otlp-http
-    port: 4318
-    targetPort: 4318
-    protocol: TCP
-  - name: jaeger-compact
-    port: 6831
-    targetPort: 6831
-    protocol: UDP
-  - name: jaeger-grpc
-    port: 14250
-    targetPort: 14250
-    protocol: TCP
-  - name: jaeger-thrift
-    port: 14268
-    targetPort: 14268
-    protocol: TCP
-  - name: zipkin
-    port: 9411
-    targetPort: 9411
-    protocol: TCP
-  - name: telemetry-metrics
-    port: 8888
-    targetPort: 8888
-    protocol: TCP
-  - name: prometheus-export
-    port: 8889
-    targetPort: 8889
-    protocol: TCP
