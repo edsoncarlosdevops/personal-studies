@@ -60,15 +60,16 @@ config:
         enabled: true
 
     # Exporta logs para o Loki via OTLP HTTP
+    # [DESABILITADO] Logs serao coletados pelo Promtail (le stdout dos pods)
     # Loki usa a porta 3100 para API HTTP (push/query)
-    loki:
-      endpoint: "loki.monitoring.svc.cluster.local:3100/otlp/v1/logs"
-      tls:
-        insecure: true
-      sending_queue:
-        enabled: true
-        num_consumers: 4
-        queue_size: 1000
+    # loki:
+    #   endpoint: "loki.monitoring.svc.cluster.local:3100/otlp/v1/logs"
+    #   tls:
+    #     insecure: true
+    #   sending_queue:
+    #     enabled: true
+    #     num_consumers: 4
+    #     queue_size: 1000
 
   service:
     pipelines:
@@ -80,10 +81,10 @@ config:
         receivers: [otlp]
         processors: [batch]
         exporters: [prometheus]
-      logs:
-        receivers: [otlp]
-        processors: [batch]
-        exporters: [loki]
+      # logs:
+      #   receivers: [otlp]
+      #   processors: [batch]
+      #   exporters: [loki]
 
     telemetry:
       logs:

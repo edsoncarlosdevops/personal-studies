@@ -38,10 +38,16 @@ loki:
           period: 24h
 
   # Habilita ingestao via OTLP (OpenTelemetry Protocol)
-  # Permite que o OTEL Collector envie logs diretamente para o Loki
+  # [DESABILITADO] Logs vao pelo Promtail (HTTP push)
   otlp_config:
     logs:
-      enabled: true
+      enabled: false
+
+testing:
+  enabled: false
+
+loki-canary:
+  enabled: false
 
   server:
     http_listen_port: 3100

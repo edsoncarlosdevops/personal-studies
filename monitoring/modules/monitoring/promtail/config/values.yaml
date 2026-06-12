@@ -1,0 +1,69 @@
+# Promtail - Coleta de logs do Kubernetes para o Loki
+# =============================================================================
+# PROBLEMAS CONHECIDOS (CORRIGIR QUANDO VOLTAR):
+#
+# 1. CLIENTS URL INCORRETA
+#    O chart usa loki-gateway como padrao, que desabilitamos.
+#    Verificar se config.lokiAddress esta sendo usado corretamente.
+#    O clients[0].url aparece como "http://loki-gateway/loki/api/v1/push"
+#    em vez de "http://loki.monitoring.svc.cluster.local:3100/loki/api/v1/push"
+#
+#    Testar: helm template promtail grafana/promtail -f values.yaml
+#    para ver o YAML gerado e confirmar se lokiAddress aparece.
+#
+# 2. PERMISSOES RBAC
+#    Promtail pode estar sem permissao pra ler /var/log/pods.
+#    O chart cria ServiceAccount e ClusterRole, mas verificar se o
+#    ClusterRole tem permissao pra listar pods (kubernetes_sd_configs).
+#
+# 3. VOLUME /var/log/pods
+#    Confirmar se o volume hostPath /var/log/pods esta montado.
+#    kubectl exec -n monitoring promtail-XXXX -- ls /var/log/pods/
+#    Se vazio, o volume nao esta montado.
+#
+# 4. LOKI CANARY (logs pppppppp)
+#    Ja desabilitamos testing.enabled=false e loki-canary.enabled=false
+#    no modulo do Loki. Confirmar se o pod canary foi removido.
+#
+# 5. DASHBOARD GRAFANA DESATUALIZADO
+#    O dashboard atual tem UID 4999d044-a288-4297-8f72-c726b1e58b5a
+#    e usa queries antigas. Criar um novo dashboard com:
+#    - Loki queries: {namespace=~"otel-test|monitoring"}
+#    - Prometheus: kube_pod_container_resource_requests
+#    - Tempo: queryType = search (padrao, sem filtro)
+#
+# Fluxo esperado apos correcao:
+#   Pod (stdout) -> /var/log/pods/ -> Promtail -> Loki (:3100)
+#
+# Labels que devem aparecer no Loki:
+#   namespace, pod, container
+# =============================================================================
+
+config:
+  # lokiAddress: URL completa para push dos logs
+  # ATENCAO: Verificar se esse campo esta sendo aplicado.
+  # Testar com: helm template promtail grafana/promtail -f values.yaml
+  lokiAddress: http://loki.monitoring.svc.cluster.local:3100/loki/api/v1/push
+
+  snippets:
+    scrapeConfigs: |
+      - job_name: kubernetes-pods
+        pipeline_stages:
+          - cri: {}
+        kubernetes_sd_configs:
+          - role: pod
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_namespace]
+            target_label: namespace
+          - source_labels: [__meta_kubernetes_pod_name]
+            target_label: pod
+          - source_labels: [__meta_kubernetes_pod_container_name]
+            target_label: container
+
+serviceAccount:
+  create: true
+  name: promtail
+
+rbac:
+  create: true
+  pspEnabled: false
