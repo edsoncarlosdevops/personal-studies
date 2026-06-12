@@ -1,0 +1,33 @@
+# Instrumentation - Auto-instrumentacao Python
+# =====================================================================
+# Este recurso configura o OTEL Operator para injetar automaticamente
+# o agente OTel Python em pods com a annotation:
+#   instrumentation.opentelemetry.io/inject-python: "true"
+#
+# O agente captura traces/metricas de frameworks como Flask, Django,
+# Requests, SQLAlchemy, etc - sem modificar o codigo da aplicacao.
+#
+# [ATENCAO] O Operator tenta injetar sidecar E auto-instrumentation
+# simultaneamente. Se nao houver um OpenTelemetryCollector sidecar
+# no namespace, a injecao do sidecar falha (log de erro) mas a
+# auto-instrumentation funciona.
+#
+# Para usar com outras linguagens, mude o nome do recurso:
+# - inject-java
+# - inject-nodejs
+# - inject-dotnet
+apiVersion: opentelemetry.io/v1alpha1
+kind: Instrumentation
+metadata:
+  name: python-instrumentation
+  namespace: otel-test
+spec:
+  exporter:
+    # Aponta para o Collector centralizado via OTLP HTTP
+    endpoint: http://opentelemetry-collector.monitoring.svc.cluster.local:4318
+  propagators:
+    - tracecontext
+    - baggage
+  sampler:
+    type: parentbased_traceidratio
+    argument: "1"

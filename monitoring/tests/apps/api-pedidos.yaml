@@ -1,0 +1,98 @@
+# API de Pedidos - Exemplo de auto-instrumentacao Python
+# =====================================================================
+# Este deployment demonstra o uso do OTEL Operator para injetar
+# automaticamente o agente de tracing Python.
+#
+# A annotation chave: instrumentation.opentelemetry.io/inject-python: "true"
+# Isso faz o Operator injetar um init container que copia o agente OTel
+# e configura as variaveis de ambiente (OTEL_EXPORTER_OTLP_ENDPOINT, etc).
+#
+# Nenhuma linha de codigo foi modificada - o agente captura traces
+# automaticamente do Flask.
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: api-pedidos
+  namespace: otel-test
+data:
+  app.py: |
+    from flask import Flask, jsonify, request
+    import random, time
+
+    app = Flask(__name__)
+
+    PEDIDOS = [
+        {"id": 1, "cliente": "Joao", "total": 150.0, "status": "entregue"},
+        {"id": 2, "cliente": "Maria", "total": 89.90, "status": "processando"},
+    ]
+
+    @app.route("/api/pedidos")
+    def listar_pedidos():
+        time.sleep(random.uniform(0.01, 0.1))
+        return jsonify(PEDIDOS)
+
+    @app.route("/api/pedidos/<int:id>")
+    def buscar_pedido(id):
+        time.sleep(random.uniform(0.02, 0.2))
+        pedido = next((p for p in PEDIDOS if p["id"] == id), None)
+        if not pedido:
+            return jsonify({"erro": "nao encontrado"}), 404
+        return jsonify(pedido)
+
+    @app.route("/api/checkout", methods=["POST"])
+    def checkout():
+        dados = request.get_json()
+        time.sleep(random.uniform(0.1, 0.5))
+        if not dados or "cliente" not in dados:
+            return jsonify({"erro": "cliente obrigatorio"}), 400
+        return jsonify({"pedido_id": 3, "status": "criado"}), 201
+
+    if __name__ == "__main__":
+        app.run(host="0.0.0.0", port=5000)
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api-pedidos
+  namespace: otel-test
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: api-pedidos
+  template:
+    metadata:
+      labels:
+        app: api-pedidos
+      annotations:
+        # [ATENCAO] Annotation que ativa auto-instrumentation Python
+        # O OTEL Operator injeta um init container com o agente OTel
+        # que captura traces/metricas automaticamente
+        instrumentation.opentelemetry.io/inject-python: "true"
+    spec:
+      containers:
+      - name: api
+        image: python:3.11-slim
+        command: ["sh", "-c", "pip install flask && python /app/app.py"]
+        ports:
+        - containerPort: 5000
+        volumeMounts:
+        - name: app
+          mountPath: /app
+      volumes:
+      - name: app
+        configMap:
+          name: api-pedidos
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: api-pedidos
+  namespace: otel-test
+spec:
+  selector:
+    app: api-pedidos
+  ports:
+  - port: 5000
+    targetPort: 5000

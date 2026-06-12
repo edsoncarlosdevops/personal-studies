@@ -1,0 +1,46 @@
+# Nginx com sidecar OTel - Exemplo de injecao de sidecar
+# =====================================================================
+# Este deployment demonstra o uso do OTEL Operator para injetar
+# um collector sidecar. Diferente da auto-instrumentation (que injeta
+# um agente), o sidecar apenas recebe dados OTLP do container principal.
+#
+# A applicacao PRECISA ter um SDK OTel para enviar dados para o sidecar.
+# O sidecar sozinho NAO instrumenta a aplicacao.
+#
+# Annotation: sidecar.opentelemetry.io/inject: "true"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx-sidecar
+  namespace: otel-test
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nginx-sidecar
+  template:
+    metadata:
+      labels:
+        app: nginx-sidecar
+      annotations:
+        # Injeta um collector sidecar (nao auto-instrumentation)
+        sidecar.opentelemetry.io/inject: "true"
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:alpine
+        ports:
+        - containerPort: 80
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nginx-sidecar
+  namespace: otel-test
+spec:
+  selector:
+    app: nginx-sidecar
+  ports:
+  - port: 80
+    targetPort: 80
