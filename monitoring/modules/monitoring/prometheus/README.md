@@ -2,7 +2,7 @@
 
 ## Visao Geral
 
-Prometheus e um sistema de monitoramento e alerta open-source, projetado para confiabilidade e simplicidade. Ele coleta metricas de alvos configurados em intervalos regulares, avalia regras de alerta e exibe resultados.
+Prometheus coleta metricas de alvos configurados em intervalos regulares, avalia regras de alerta e exibe resultados.
 
 ## O que ele faz no projeto
 
@@ -10,85 +10,140 @@ O Prometheus e o backbone de metricas do cluster. Ele:
 
 1. **Coleta metricas** do OTEL Collector (porta 8889)
 2. **Coleta metricas** dele mesmo (localhost:9090)
-3. **Armazena** com retencao de 5 dias (sem persistencia em lab)
+3. **Armazena** (sem persistencia em lab)
 4. **Expoe** dados para o Grafana via datasource
 
 ## Arquitetura do Scraping
 
 ```
-OTEL Collector (:8889) ----+
-                           |
-Prometheus Server (:9090) -+----> [Storage TSDB]
-                           |
-kube-state-metrics (desligado)
-                           |
-node-exporter (desligado)
+App (OTel SDK) ---> OTEL Collector (:4317)
+                              |
+                    +---------+---------+
+                    |                   |
+              :8889 (export)     :4317 (Tempo)
+                    |                   |
+              Prometheus           Tempo
+                    |                   |
+              Grafana (query)     Grafana (query)
 ```
 
-No lab, os componentes extras estao desligados para economizar recursos do t3.medium.
+## [ATENCAO] Scrape Configs
 
-## Configuracoes Importantes
-
-### O que foi desabilitado (e por que)
-
-| Componente | Status | Motivo |
-|-----------|--------|--------|
-| Alertmanager | disabled | Usamos o modulo separado |
-| Pushgateway | disabled | Nao necessario em lab |
-| node-exporter | disabled | Economizar recursos do t3.medium |
-| kube-state-metrics | disabled | Economizar recursos do t3.medium |
-
-### Por que persistencia desabilitada?
+O Prometheus so raspa targets listados em `extraScrapeConfigs`.
+Sem o target do OTEL Collector, metricas como `http_requests_total`
+nunca aparecem nas queries.
 
 ```yaml
-persistentVolume:
-  enabled: false
+extraScrapeConfigs: |
+  - job_name: opentelemetry-collector
+    scrape_interval: 15s
+    static_configs:
+      - targets:
+        - opentelemetry-collector.monitoring.svc.cluster.local:8889
 ```
 
-No EKS com t3.medium (2 vCPU, 4GB RAM), habilitar persistencia:
-- Cria um PVC de 8GB no EBS gp2
-- gp2 tem `volumeBindingMode: WaitForFirstConsumer`
-- Atrasa o scheduling do pod
-- Para lab, nao vale a complexidade
+## Queries  Uteis (PromQL)
 
-### Retencao de dados
+### Saude do Cluster
 
-```yaml
-retention: "5d"
+```promql
+# Quais targets estao respondendo
+up
+
+# % de targets UP
+(count(up == 1) / count(up)) * 100
 ```
 
-Apenas 5 dias de metricas. Em producao, aumente para 15-30 dias com persistencia habilitada e um volume EBS maior.
+### Metricas do OTEL Collector
 
-## Metricas Disponiveis
+```promql
+# Spans recebidos por segundo (taxa)
+rate(otelcol_receiver_accepted_spans[1m])
 
-### Do Prometheus (ele mesmo)
-- `prometheus_target_interval_length_seconds`
-- `prometheus_tsdb_head_series`
-- `prometheus_engine_query_duration_seconds`
+# Spans com erro
+rate(otelcol_receiver_refused_spans[1m])
 
-### Do OTEL Collector (via scraping :8889)
-- `otelcol_process_memory_rss`
-- `otelcol_process_cpu_seconds`
-- `otelcol_exporter_sent_spans`
+# Memoria do Collector
+otelcol_process_memory_rss
+```
 
-### Da sua aplicacao (via SDK OTel)
-- `http.server.duration` (latencia das requisicoes)
-- `http.server.request_count` (numero de requisicoes)
-- `db.client.connections_usage` (conexoes com o banco)
+### Metricas Customizadas (via SDK OTel)
+
+```promql
+# Total de requisicoes HTTP
+http_requests_total
+
+# Requisicoes por rota
+sum by(route) (http_requests_total)
+
+# Requisicoes por metodo
+sum by(method) (http_requests_total)
+
+# Total de requisicoes (contador acumulado)
+sum(http_requests_total)
+
+# Requisicoes por segundo
+rate(http_requests_total[1m])
+
+# Requisicoes por segundo por rota
+sum by(route) (rate(http_requests_total[1m]))
+
+# Top 5 rotas mais chamadas
+topk(5, sum by(route) (rate(http_requests_total[5m])))
+```
+
+### Latencia (Histogramas)
+
+```promql
+# Latencia media por rota (ms)
+sum by(route) (rate(http_request_duration_ms_sum[5m]))
+/
+sum by(route) (rate(http_request_duration_ms_count[5m]))
+
+# Latencia media geral (ms)
+sum(rate(http_request_duration_ms_sum[5m]))
+/
+sum(rate(http_request_duration_ms_count[5m]))
+
+# Percentil 95 (aproximado)
+histogram_quantile(0.95,
+  sum by(route, le) (rate(http_request_duration_ms_bucket[5m]))
+)
+```
+
+### Taxa de Erro
+
+```promql
+# % de erro por rota
+sum by(route) (rate(http_requests_total{status=~"5..|4.."}[5m]))
+/
+sum by(route) (rate(http_requests_total[5m]))
+* 100
+
+# Requisicoes com erro (400, 500)
+http_requests_total{status=~"4..|5.."}
+```
+
+### Usuarios Online
+
+```promql
+# Usuarios online atualmente
+users_online
+
+# Usuarios por tier
+sum by(tier) (users_online)
+
+# Total de usuarios
+sum(users_online)
+```
 
 ## Como acessar
 
 ```bash
-# Port-forward para acessar a UI do Prometheus
+# Port-forward para a UI do Prometheus
 kubectl -n monitoring port-forward svc/prometheus-server 9090:80
 
-# Abrir no navegador
-# http://localhost:9090
-
-# Exemplos de queries para testar:
-# - up
-# - prometheus_target_interval_length_seconds
-# - rate(prometheus_tsdb_head_series[5m])
+# Acessar http://localhost:9090
 ```
 
 ## Comandos Uteis
@@ -98,19 +153,20 @@ kubectl -n monitoring port-forward svc/prometheus-server 9090:80
 kubectl get pods -n monitoring | grep prometheus
 
 # Ver targets configurados
-kubectl -n monitoring port-forward svc/prometheus-server 9090:80
-# http://localhost:9090/targets
+curl http://localhost:9090/api/v1/targets
 
-# Ver configuracoes carregadas
-# http://localhost:9090/config
+# Ver configuracao atual
+curl http://localhost:9090/api/v1/status/config
 
-# Query rapida via API
+# Query via API
 curl "http://localhost:9090/api/v1/query?query=up"
+
+# Query com range (ultimos 5 min)
+curl "http://localhost:9090/api/v1/query_range?query=up&start=$(date -v-5M +%s)&end=$(date +%s)&step=15s"
 ```
 
 ## Referencias
 
-- [Documentacao Oficial](https://prometheus.io/docs/introduction/overview/)
-- [Data Model](https://prometheus.io/docs/concepts/data_model/)
-- [Querying (PromQL)](https://prometheus.io/docs/prometheus/latest/querying/basics/)
-- [Helm Chart](https://github.com/prometheus-community/helm-charts/tree/main/charts/prometheus)
+- [PromQL Basics](https://prometheus.io/docs/prometheus/latest/querying/basics/)
+- [Histograms](https://prometheus.io/docs/concepts/metric_types/#histogram)
+- [Rate vs Increase](https://prometheus.io/docs/prometheus/latest/querying/functions/#rate)

@@ -1,21 +1,33 @@
-# Prometheus - Values para Helm Chart
+# Prometheus - Configuration System
 # =====================================================================
-# Prometheus e o sistema padrao de monitoramento e alerta do ecossistema
-# CNCF. Coleta metricas via scraping HTTP e armazena em formato TSDB.
+# Prometheus coleta metricas via scraping HTTP e armazena em TSDB.
+#
+# [ATENCAO] ALVOS DE SCRAPING:
+# O Prometheus so raspa targets listados em scrape_configs.
+# Se o target do OTEL Collector nao estiver configurado, as metricas
+# enviadas via SDK OTel nunca aparecem nas queries.
+#
+# Scrape configs definidos:
+# - prometheus (localhost:9090): metricas do proprio Prometheus
+# - opentelemetry-collector (:8889): endpoint de export do Collector
 
 # Desabilita componentes que nao vamos usar no lab
 alertmanager:
-  enabled: false # Ja temos um Alertmanager separado
+  enabled: false
+pushgateway:
+  enabled: false
+nodeExporter:
+  enabled: false
+kubeStateMetrics:
+  enabled: false
 
-# Configuracao do servidor Prometheus
 server:
   name: server
-  # Configuracoes globais de scraping
+
   global:
     scrape_interval: 15s
     evaluation_interval: 15s
 
-  # Recursos do servidor
   resources:
     limits:
       cpu: 500m
@@ -24,11 +36,19 @@ server:
       cpu: 100m
       memory: 256Mi
 
-  # Persistencia opcional (desabilitada para lab)
   persistentVolume:
     enabled: false
 
-  # Service account com permissoes para scrap de metricas do K8s
   serviceAccount:
     create: true
     name: prometheus-server
+
+# [ATENCAO] extraScrapeConfigs - Obrigatorio para raspar o OTEL Collector
+# Sem isso, metricas como http_requests_total nunca aparecem no Prometheus
+# O target aponta para o service do Collector na porta 8889 (prometheus-export)
+extraScrapeConfigs: |
+  - job_name: opentelemetry-collector
+    scrape_interval: 15s
+    static_configs:
+      - targets:
+        - opentelemetry-collector.monitoring.svc.cluster.local:8889

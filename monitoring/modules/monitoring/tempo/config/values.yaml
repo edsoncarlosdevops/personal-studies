@@ -1,36 +1,23 @@
-# Grafana Tempo - Configuration System (Production Ready)
+# Grafana Tempo - Configuration System
 # =====================================================================
-# Tempo e um banco de dados de tracing distribuido de alta escala.
-# Ele aceita dados via OTLP, Jaeger, Zipkin e OpenCensus.
+# Tempo e um banco de dados de tracing distribuido.
 #
-# [ATENCAO] StorageClass no EKS
-# - No EKS, a StorageClass padrao e "gp2" com WaitForFirstConsumer
-# - Para lab, persistence pode ficar false
-# - Em producao, usar backend S3 e nao disco local
+# [ATENCAO] PORTAS CRITICAS:
+# - 3100: http_listen_port (API de consulta de traces - USADA PELO GRAFANA)
+# - 4317: OTLP gRPC (ingestao de traces - USADA PELO OTEL COLLECTOR)
+# - 4318: OTLP HTTP (ingestao de traces alternativa)
+# - 3200: NAO EXISTE (causa Bad Gateway se configurado no Grafana)
 #
-# [ATENCAO] Backend local vs S3
-# - Backend "local" e apenas para lab/sandbox
-# - Em producao, configurar backend S3/GCS para dados de tracing
-# - Tracing costuma gerar muitos dados (GB/dia facilmente)
-#
-# Portas do Tempo:
-# - 3100: http_listen_port (API de consulta de traces - usada pelo Grafana)
-# - 4317: OTLP gRPC (ingestao de traces)
-# - 4318: OTLP HTTP (ingestao de traces)
-# - 3200: NAO EXISTE (nao confundir!)
-# - 6831/6832: Jaeger Thrift Compact/Binary
-# - 9411: Zipkin
+# [ATENCAO] FLUXO:
+# App (OTel SDK) -> OTEL Collector (:4317) -> Tempo (:4317)
+# Grafana -> Tempo (:3100) para consultar traces
 
-# Modo de deploy: monolithic (single binary), scalable (microservices), ou serverless
 mode: monolithic
 
 tempo:
-  # Configuracao unificada do Tempo em YAML
   yaml:
-    # Desabilita multi-tenencia para lab
     multitenancy_enabled: false
 
-    # Configura receivers padrao
     distributor:
       receivers:
         otlp:
@@ -40,7 +27,6 @@ tempo:
             http:
               endpoint: 0.0.0.0:4318
 
-    # Armazenamento local (apenas para lab!)
     storage:
       trace:
         backend: local
@@ -49,20 +35,16 @@ tempo:
         wal:
           path: /var/tempo/wal
 
-    # Servidor HTTP - porta para consultas do Grafana
     server:
       http_listen_port: 3100
 
-    # Retencao de dados (24h para lab)
     compactor:
       compaction:
         block_retention: 24h
 
-# Persistencia para o volume de traces
 persistence:
-  enabled: false # Lab. Em producao, usar S3
+  enabled: false
 
-# Recursos do pod
 resources:
   limits:
     cpu: 500m

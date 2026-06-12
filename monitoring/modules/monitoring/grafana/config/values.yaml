@@ -1,10 +1,19 @@
-# Grafana Helm Chart Configuration
+# Grafana - Configuration System
 # =====================================================================
-# [ATENCAO] ATENÇÃO: Portas dos Datasources
-# Cada servico expoe portas especificas para diferentes propositos
-# (ingestao vs consulta). Configurar a porta errada causa
-# "Bad Gateway" ou "Connection Refused" no Grafana.
-# =====================================================================
+# Grafana e a camada de visualizacao da stack de observabilidade.
+# Conecta-se a Prometheus, Loki e Tempo como datasources.
+#
+# [ATENCAO] PORTAS DOS DATASOURCES - Erro comum:
+# Cada servico expoe portas DIFERENTES para ingestao vs consulta.
+# Configurar a porta errada = Bad Gateway ou 404 no Grafana.
+#
+# Resumo das portas de CONSULTA (usadas pelo Grafana):
+# - Prometheus: porta 80 (service mapeia 9090 -> 80)
+# - Loki: 3100 (http_listen_port)
+# - Tempo: 3100 (http_listen_port) - NAO 3200, NAO 4317
+# - Tempo 4317 = OTLP gRPC (ingestao de dados, nao consulta)
+# - Tempo 4318 = OTLP HTTP (ingestao de dados, nao consulta)
+
 replicaCount: ${grafana_replica_count}
 
 resources:
@@ -16,7 +25,7 @@ resources:
     memory: 128Mi
 
 persistence:
-  enabled: false  # Disabled to allow multiple replicas
+  enabled: false
   storageClass: oci
   accessMode: ReadWriteOnce
   size: 10Gi
@@ -28,7 +37,6 @@ datasources:
       - name: Prometheus
         type: prometheus
         access: proxy
-        # Porta 80 = service do Prometheus Server (container expoe 9090, service mapeia pra 80)
         url: http://prometheus-server:80
         isDefault: true
         jsonData:
@@ -37,8 +45,6 @@ datasources:
       - name: Loki
         type: loki
         access: proxy
-        # Porta 3100 = http_listen_port padrao do Loki para queries HTTP (API de logs)
-        # Nao confundir com porta 9095 (gRPC interno) ou 9096 (HTTP interno)
         url: http://loki:3100
         jsonData:
           timeout: 60
@@ -47,11 +53,8 @@ datasources:
       - name: Tempo
         type: tempo
         access: proxy
-        # [ATENCAO] PORTAS CRITICAS DO TEMPO:
-        # - 3100: http_listen_port (API de consulta de traces - usada pelo Grafana)
-        # - 4317: OTLP gRPC (ingestao de traces, nao para consultas)
-        # - 4318: OTLP HTTP (ingestao de traces, nao para consultas)
-        # - 3200: NAO EXISTE (causa Bad Gateway se configurado)
+        # [ATENCAO] Porta 3100 = API de consulta do Tempo
+        # Nao confundir com 4317 (OTLP gRPC - ingestao) ou 3200 (nao existe)
         url: http://tempo:3100
         jsonData:
           traces: true

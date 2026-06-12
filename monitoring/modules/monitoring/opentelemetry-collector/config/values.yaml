@@ -1,109 +1,80 @@
 # OpenTelemetry Collector - Configuration System
 # =====================================================================
-# O Collector e um agente/proxy que recebe, processa e exporta dados
-# de telemetria (Traces, Metrics, Logs). Nesta configuracao padrao, ele
-# roda em modo "deployment" (centralizado), recebendo OTLP e entregando
-# traces para o Tempo e metricas para o Prometheus.
-# =====================================================================
+# O Collector recebe, processa e exporta dados de telemetria
+# (Traces, Metrics, Logs). Modo deployment (centralizado).
 #
-# [ATENCAO] PORTAS DO OTEL COLLECTOR:
-# - 4317: OTLP gRPC (ingestao de traces/metricas/logs via protocolo OTel)
-# - 4318: OTLP HTTP (ingestao de traces/metricas/logs via HTTP)
-# - 8888: Metricas internas do proprio Collector (para Prometheus scrap)
-# - 8889: Endpoint Prometheus exporter (para o Prometheus raspar metricas processadas)
-# - 55680: OTLP legacy (apenas compatibilidade reversa)
+# [ATENCAO] PORTAS - Servico precisa expor estas portas no values.yaml
+# para o Prometheus conseguir raspar as metricas:
+# - 4317: OTLP gRPC (ingestao de traces/metricas/logs)
+# - 4318: OTLP HTTP (ingestao alternativa via HTTP)
+# - 8888: Telemetria do proprio Collector (metricas internas)
+# - 8889: Endpoint Prometheus (exporter para o Prometheus raspar)
+# Sem essas portas no bloco "service.ports", o Prometheus nao consegue
+# acessar e o target fica "down".
 #
-# [ATENCAO] DIFERENCA CRITICA: Tempo x OTEL Collector
-# O Tempo RECEBE dados na porta 4317 (OTLP gRPC) - mesma do Collector
-# Mas o Tempo CONSULTA dados na porta 3100 (HTTP API)
-# O Collector nunca e usado para consulta, apenas para ingestao
+# [ATENCAO] FLUXO DE DADOS:
+# App (OTel SDK) -> Collector (:4317 gRPC) -> Tempo (:4317) [traces]
+# App (OTel SDK) -> Collector (:4317 gRPC) -> Prometheus (:8889) [metricas]
+# Prometheus raspa Collector em :8889/metrics
 
-# Replicas da instancia do Collector centralizado.
-# Em producao, esse valor pode subir conforme o volume de injecao de dados.
 replicaCount: ${otel_collector_replica_count}
 
-# O modo "deployment" executa o Collector como um Deploy do Kubernetes.
-# Outras opcoes comuns:
-# - daemonset: executa um pod por Node (bom para coletar logs/metricas do Host)
-# - statefulset: executa pods com identidades persistentes (bom para escalonamento com persistencia)
 mode: deployment
 
 image:
-  # Imagem da comunidade contendo todos os receptores/processadores extras (ex: AWS, K8s, Azure)
   repository: otel/opentelemetry-collector-contrib
   tag: 0.112.0
 
-# Estrutura Principal de Configuracao do OpenTelemetry Collector
-# Ela e dividida em: receivers, processors, exporters e service.
 config:
-  # --
-  # RECEIVERS: Como o Collector recebe dados das aplicacoes
-  # --
   receivers:
-    # OTLP (OpenTelemetry Protocol): Padrao de industria gRPC e HTTP.
     otlp:
       protocols:
         grpc:
-          endpoint: 0.0.0.0:4317 # Porta padrao gRPC para receber dados de bibliotecas OTel
+          endpoint: 0.0.0.0:4317
         http:
-          endpoint: 0.0.0.0:4318 # Porta padrao HTTP para receber payloads JSON/protobuf
+          endpoint: 0.0.0.0:4318
 
-  # --
-  # PROCESSORS: Como o Collector trata, enriquece ou limpa os dados
-  # --
   processors:
-    # O batch processor agrupa os dados antes de envia-los (reduz chamadas de rede e overhead)
     batch:
-      timeout: 5s              # Tempo maximo de espera antes de forcar o envio de um lote
-      send_batch_size: 1024    # Quantidade ideal de itens por lote
+      timeout: 5s
+      send_batch_size: 1024
 
-  # --
-  # EXPORTERS: Para onde o Collector envia os dados processados
-  # --
   exporters:
-    # Envia traces via protocolo OTLP para o Tempo
-    # [ATENCAO] Porta 4317 = OTLP gRPC do Tempo (ingestao de traces)
-    # Nao confundir com porta 3100 (consulta HTTP, nao usada pelo Collector)
+    # Exporta traces para o Tempo (porta 4317 = OTLP gRPC)
+    # [ATENCAO] Tempo usa 4317 para INGESTAO, 3100 para CONSULTA (Grafana)
     otlp:
       endpoint: "tempo.monitoring.svc.cluster.local:4317"
       tls:
-        insecure: true # Comunicacao HTTP dentro do cluster (sem SSL)
+        insecure: true
       sending_queue:
         enabled: true
         num_consumers: 4
-        queue_size: 1000 # Fila de buffer interna caso o backend fique temporariamente indisponivel
+        queue_size: 1000
 
-    # Expoe um endpoint Prometheus para raspagem (Scraping) externa
+    # Exporta metricas em formato Prometheus (raspado pelo Prometheus)
+    # [ATENCAO] Esta porta (8889) precisa estar no "service.ports" abaixo
     prometheus:
       endpoint: "0.0.0.0:8889"
       resource_to_telemetry_conversion:
-        enabled: true # Converte atributos de recursos do OTel para labels do Prometheus
+        enabled: true
 
-  # --
-  # SERVICE: Conecta os componentes acima atraves de pipelines
-  # --
   service:
     pipelines:
-      # Pipeline de Tracing
       traces:
         receivers: [otlp]
         processors: [batch]
         exporters: [otlp]
-
-      # Pipeline de Metricas
       metrics:
         receivers: [otlp]
         processors: [batch]
         exporters: [prometheus]
 
-    # Habilita telemetria interna (metricas e logs do proprio Collector)
     telemetry:
       logs:
         level: "info"
       metrics:
-        address: "0.0.0.0:8888" # Expoe porta 8888 para o Prometheus raspar as metricas do Collector
+        address: "0.0.0.0:8888"
 
-# Dimensionamento do recurso para o pod do Collector.
 resources:
   limits:
     cpu: 500m
@@ -111,3 +82,40 @@ resources:
   requests:
     cpu: 100m
     memory: 128Mi
+
+# [ATENCAO] Portas do Service - SEM ISSO Prometheus nao consegue raspar
+# Lista todas as portas que o pod expoe para outros servicos acessarem
+service:
+  ports:
+  - name: otlp
+    port: 4317
+    targetPort: 4317
+    protocol: TCP
+  - name: otlp-http
+    port: 4318
+    targetPort: 4318
+    protocol: TCP
+  - name: jaeger-compact
+    port: 6831
+    targetPort: 6831
+    protocol: UDP
+  - name: jaeger-grpc
+    port: 14250
+    targetPort: 14250
+    protocol: TCP
+  - name: jaeger-thrift
+    port: 14268
+    targetPort: 14268
+    protocol: TCP
+  - name: zipkin
+    port: 9411
+    targetPort: 9411
+    protocol: TCP
+  - name: telemetry-metrics
+    port: 8888
+    targetPort: 8888
+    protocol: TCP
+  - name: prometheus-export
+    port: 8889
+    targetPort: 8889
+    protocol: TCP

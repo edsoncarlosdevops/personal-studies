@@ -1,68 +1,47 @@
 # Grafana Loki - Configuration System
 # =====================================================================
-# Loki e um sistema de agregacao de logs inspirado no Prometheus.
-# Ele indexa apenas metadados (labels) em vez do texto completo,
-# tornando o armazenamento de logs extremamente barato e performatico.
-# =====================================================================
+# Loki e um sistema de agregacao de logs. Indexa apenas metadados
+# (labels), nao o texto completo, tornando o armazenamento barato.
 #
-# [ATENCAO]: path_prefix e permissoes de escrita
-# - O container do Loki roda como user nao-root (UID 10001)
-# - O diretorio /var/loki NAO e writable pelo user nao-root
-#   na imagem padrao quando sem persistencia (emptyDir)
-# - Solucao: usar /tmp/loki como path_prefix, ja que /tmp
-#   tem um emptyDir montado e permissao correta
+# [ATENCAO] path_prefix - Erro comum:
+# O container do Loki roda como user nao-root (UID 10001).
+# /var/loki NAO e writable por este user. Usar /tmp/loki como prefix.
 #
-# [ATENCAO]: StorageClass no EKS
-# - StorageClass "gp2" com volumeBindingMode: WaitForFirstConsumer
-# - Se habilitar persistencia, usar storageClass: "gp2"
-# - Para lab, manter persistence.enabled: false
-#
-# [ATENCAO] PORTAS DO LOKI:
-# - 3100: http_listen_port (API REST de consulta/ingestao - usada pelo Grafana)
-# - 9095: gRPC interno (comunicacao entre componentes, nao exposto externamente)
-# - 9096: HTTP interno (nao utilizado nesta config SingleBinary)
+# [ATENCAO] PORTAS:
+# - 3100: http_listen_port (API de consulta/ingestao - usada pelo Grafana)
+# - 9095: gRPC interno (comunicacao entre componentes)
+# - 9096: HTTP interno (nao usado em SingleBinary)
 
-# Modo de deploy do Loki:
-# - SingleBinary: Roda todos os componentes (ingester, querier, etc) em um unico processo. (Ideal para labs/ambientes leves)
-# - SimpleScalable: Separa os caminhos de escrita e leitura para escalonamento independente.
-# - Distributed: Cada microsservico roda como um deploy isolado (altamente escalavel para producao).
 deploymentMode: SingleBinary
 
 loki:
-  # Desabilita autenticacao multi-tenant. Quando true, exige cabecalho X-Scope-OrgID nas requisicoes.
   auth_enabled: false
-  
+
   commonConfig:
     replication_factor: 1
-    # path_prefix usa /tmp/loki pois /var/loki e read-only
-    # para o user nao-root do container Loki
     path_prefix: /tmp/loki
 
-  # Armazenamento no disco local (Filesystem)
   storage:
     type: "filesystem"
     filesystem:
       chunks_directory: /tmp/loki/chunks
       rules_directory: /tmp/loki/rules
-  
-  # Configuracao de schema de indice. TSDB (Time Series Database) e o mais moderno e eficiente.
+
   schemaConfig:
     configs:
       - from: "2024-01-01"
         store: tsdb
-        object_store: filesystem # Modificar para "s3" caso configure armazenamento em bucket AWS S3
+        object_store: filesystem
         schema: v13
         index:
           prefix: index_
           period: 24h
 
-#  Configuracao do Modo SingleBinary 
 singleBinary:
   replicas: 1
   persistence:
-    enabled: false # Desabilitado para lab. Se habilitar, usar storageClass: "gp2"
-  
-  # Limites e requisicoes de recursos leves apropriados para t3.medium
+    enabled: false
+
   resources:
     limits:
       cpu: 1000m
@@ -71,8 +50,6 @@ singleBinary:
       cpu: 100m
       memory: 256Mi
 
-#  Desabilitar explicitamente componentes distribuidos 
-# Necessario para SingleBinary em modo local (sem S3)
 backend:
   replicas: 0
 read:
