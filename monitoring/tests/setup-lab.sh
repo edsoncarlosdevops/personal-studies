@@ -2,33 +2,51 @@
 # =====================================================================
 # setup-lab.sh - Configura ambiente de teste do OTEL Operator
 # =====================================================================
-# Este script automatiza a criacao do namespace de testes, aplicacao
-# dos manifests (sidecar, instrumentation, apps), geracao de trafego
-# e verificacao dos traces no Tempo.
+# Script automatizado que:
+#   1. Cria namespace otel-test
+#   2. Aplica os manifests do OTEL Operator (sidecar + instrumentation)
+#      que estao em: monitoring/modules/monitoring/opentelemetry-operator/manifests/
+#   3. Sobe apps de exemplo (api-pedidos + nginx-sidecar)
+#   4. Gera trafego HTTP automaticamente
+#   5. Verifica traces no Tempo
 #
 # Uso:
 #   chmod +x setup-lab.sh
 #   ./setup-lab.sh
 #
-# Pre-requisitos:
-#   - Cluster EKS rodando com a stack de monitoring
-#   - OTEL Operator instalado no namespace monitoring
-#   - kubectl configurado
+# Para limpar depois:
+#   kubectl delete namespace otel-test
+#
+# Estrutura de diretorios:
+#   monitoring/
+#     modules/monitoring/opentelemetry-operator/
+#       manifests/                         <- Recursos do Operator (CRDs)
+#         otel-sidecar.yaml
+#         python-instrumentation.yaml
+#     tests/
+#       setup-lab.sh                       <- Script de automacao
+#       apps/                              <- Apps de exemplo para teste
+#         api-pedidos.yaml
+#         nginx-sidecar.yaml
 # =====================================================================
 
 set -e
 
 NAMESPACE="otel-test"
-BASE_DIR="$(dirname "$0")"
+# Caminho relativo para os manifests do Operator e apps de teste
+OPERATOR_MANIFESTS="../modules/monitoring/opentelemetry-operator/manifests"
+APPS_DIR="apps"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 echo "=============================================="
 echo "  Setup do Ambiente de Teste OTEL Operator"
 echo "=============================================="
+echo "Namespace: $NAMESPACE"
+echo ""
 
 # -----------------------------------------------------------------
 # Passo 1: Cria o namespace
 # -----------------------------------------------------------------
-echo ""
 echo "[1/6] Criando namespace $NAMESPACE..."
 kubectl create namespace $NAMESPACE --dry-run=client -o yaml | kubectl apply -f -
 
@@ -36,16 +54,18 @@ kubectl create namespace $NAMESPACE --dry-run=client -o yaml | kubectl apply -f 
 # Passo 2: Aplica os manifests do OTEL Operator
 # -----------------------------------------------------------------
 echo "[2/6] Aplicando OpenTelemetryCollector sidecar..."
-kubectl apply -f $BASE_DIR/otel-sidecar.yaml
+kubectl apply -f $SCRIPT_DIR/$OPERATOR_MANIFESTS/otel-sidecar.yaml
 
 echo "[3/6] Aplicando Instrumentation Python..."
-kubectl apply -f $BASE_DIR/python-instrumentation.yaml
+kubectl apply -f $SCRIPT_DIR/$OPERATOR_MANIFESTS/python-instrumentation.yaml
 
 # -----------------------------------------------------------------
 # Passo 3: Aguarda os recursos ficarem prontos
 # -----------------------------------------------------------------
 echo "[4/6] Aguardando recursos do Operator..."
 sleep 5
+echo ""
+echo "Recursos criados:"
 kubectl get opentelemetrycollector -n $NAMESPACE
 kubectl get instrumentation -n $NAMESPACE
 
@@ -54,16 +74,18 @@ kubectl get instrumentation -n $NAMESPACE
 # -----------------------------------------------------------------
 echo ""
 echo "[5/6] Subindo aplicacoes de exemplo..."
-kubectl apply -f $BASE_DIR/apps/api-pedidos.yaml
-kubectl apply -f $BASE_DIR/apps/nginx-sidecar.yaml
+kubectl apply -f $SCRIPT_DIR/$APPS_DIR/api-pedidos.yaml
+kubectl apply -f $SCRIPT_DIR/$APPS_DIR/nginx-sidecar.yaml
 
 echo ""
 echo "Aguardando pods ficarem prontos..."
 echo "  - api-pedidos (auto-instrumentation Python)..."
-kubectl wait --for=condition=ready pod -n $NAMESPACE -l app=api-pedidos --timeout=120s 2>/dev/null || echo "    TIMEOUT - verificando manualmente"
+kubectl wait --for=condition=ready pod -n $NAMESPACE -l app=api-pedidos --timeout=120s 2>/dev/null || \
+  echo "    TIMEOUT - verifique manualmente com: kubectl get pods -n $NAMESPACE"
 
 echo "  - nginx-sidecar..."
-kubectl wait --for=condition=ready pod -n $NAMESPACE -l app=nginx-sidecar --timeout=60s 2>/dev/null || echo "    TIMEOUT - verificando manualmente"
+kubectl wait --for=condition=ready pod -n $NAMESPACE -l app=nginx-sidecar --timeout=60s 2>/dev/null || \
+  echo "    TIMEOUT - verifique manualmente com: kubectl get pods -n $NAMESPACE"
 
 echo ""
 echo "Pods rodando:"
@@ -74,7 +96,6 @@ kubectl get pods -n $NAMESPACE
 # -----------------------------------------------------------------
 echo ""
 echo "[6/6] Gerando trafego de teste..."
-
 echo "  - API Pedidos (auto-instrumentation)..."
 for i in $(seq 1 10); do
   kubectl exec -n monitoring deployment/grafana -- sh -c \
@@ -115,9 +136,11 @@ print(f'Total de traces: {len(traces)}')
 for t in traces[:10]:
     print(f'  {t.get(\"rootServiceName\",\"?\")} - {t.get(\"rootTraceName\",\"?\")} ({t.get(\"durationMs\",0)}ms)')
 if not traces:
-    print('  NENHUM trace encontrado. Verifique:')
-    print('  - kubectl logs -n monitoring -l app.kubernetes.io/name=opentelemetry-operator')
-    print('  - kubectl logs -n $NAMESPACE -l app=api-pedidos')
+    print()
+    print('  NENHUM trace encontrado. Possiveis causas:')
+    print('  1. O pod pode nao ter a annotation correta')
+    print('  2. O Operator pode estar com erro (kubectl logs -n monitoring -l app.kubernetes.io/name=opentelemetry-operator)')
+    print('  3. O init container pode ter falhado (kubectl describe pod -n $NAMESPACE -l app=api-pedidos)')
 " 2>/dev/null
 
 echo ""
@@ -125,14 +148,11 @@ echo "=============================================="
 echo "  AMBIENTE PRONTO"
 echo "=============================================="
 echo ""
-echo "Para acessar o Grafana:"
-echo "  kubectl -n monitoring port-forward svc/grafana 3000:80"
-echo "  http://localhost:3000"
+echo "Comandos uteis:"
+echo "  Grafana:  kubectl -n monitoring port-forward svc/grafana 3000:80"
+echo "  Prometheus: kubectl -n monitoring port-forward svc/prometheus-server 9090:80"
+echo "  Logs API: kubectl logs -n $NAMESPACE -l app=api-pedidos"
+echo "  Logs Operator: kubectl logs -n monitoring -l app.kubernetes.io/name=opentelemetry-operator"
 echo ""
-echo "Para limpar o ambiente:"
-echo "  kubectl delete namespace $NAMESPACE"
-echo ""
-echo "Metricas no Prometheus:"
-echo "  kubectl -n monitoring port-forward svc/prometheus-server 9090:80"
-echo "  http://localhost:9090"
+echo "Para limpar: kubectl delete namespace $NAMESPACE"
 echo ""

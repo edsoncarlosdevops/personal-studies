@@ -1,0 +1,66 @@
+# =====================================================================
+# OpenTelemetryCollector - Modo Sidecar
+# =====================================================================
+# Recurso gerenciado pelo OTEL Operator (CRD: opentelemetry.io/v1alpha1).
+#
+# O que faz: Cria uma instancia de collector que pode ser injetada como
+# sidecar em pods que tenham a annotation:
+#   sidecar.opentelemetry.io/inject: "true"
+#
+# Fluxo de dados:
+#   App -> sidecar (:4317 OTLP) -> Collector centralizado -> Tempo/Prometheus
+#
+# [ATENCAO] O Operator PRECISA de ao menos um OpenTelemetryCollector
+# no namespace para que o webhook de mutacao funcione. Sem ele, o
+# Operator loga erro: "no OpenTelemetry Collector instances available"
+# e nao injeta nem sidecar nem auto-instrumentation.
+#
+# Diferenca entre mode: sidecar e mode: deployment:
+# - sidecar: injetado como container extra no pod da aplicacao
+# - deployment: executado como um deploy separado (coletor centralizado)
+#
+# Relacao com outros recursos:
+# - Depende: OTEL Operator instalado
+# - Usado por: Instrumentation (auto-instrumentation precisa deste recurso)
+# - Usado por: Pods com annotation sidecar.opentelemetry.io/inject
+# =====================================================================
+apiVersion: opentelemetry.io/v1alpha1
+kind: OpenTelemetryCollector
+metadata:
+  name: otel-sidecar
+  namespace: otel-test
+spec:
+  mode: sidecar
+  config: |
+    # Recebe dados OTLP do container principal da aplicacao
+    receivers:
+      otlp:
+        protocols:
+          grpc:
+            endpoint: 0.0.0.0:4317
+          http:
+            endpoint: 0.0.0.0:4318
+
+    # Agrupa dados antes de exportar (reduz requisicoes de rede)
+    processors:
+      batch:
+        timeout: 5s
+        send_batch_size: 1024
+
+    # Repassa para o Collector centralizado (que envia ao Tempo/Prometheus)
+    exporters:
+      otlp:
+        endpoint: opentelemetry-collector.monitoring.svc.cluster.local:4317
+        tls:
+          insecure: true
+
+    service:
+      pipelines:
+        traces:
+          receivers: [otlp]
+          processors: [batch]
+          exporters: [otlp]
+        metrics:
+          receivers: [otlp]
+          processors: [batch]
+          exporters: [otlp]

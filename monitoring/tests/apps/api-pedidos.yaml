@@ -1,14 +1,22 @@
+# =====================================================================
 # API de Pedidos - Exemplo de auto-instrumentacao Python
 # =====================================================================
-# Este deployment demonstra o uso do OTEL Operator para injetar
-# automaticamente o agente de tracing Python.
+# APENAS PARA TESTE - Este deployment demonstra o uso da annotation
+# de auto-instrumentation do OTEL Operator.
 #
-# A annotation chave: instrumentation.opentelemetry.io/inject-python: "true"
-# Isso faz o Operator injetar um init container que copia o agente OTel
-# e configura as variaveis de ambiente (OTEL_EXPORTER_OTLP_ENDPOINT, etc).
+# Pre-requisito: O recurso Instrumentation (python-instrumentation)
+# precisa existir no mesmo namespace. Ele e gerenciado pelo modulo:
+#   monitoring/modules/monitoring/opentelemetry-operator/manifests/
 #
-# Nenhuma linha de codigo foi modificada - o agente captura traces
-# automaticamente do Flask.
+# Annotation chave:
+#   instrumentation.opentelemetry.io/inject-python: "true"
+# Isso faz o Operator injetar um init container com o agente OTel Python
+# que captura traces automaticamente do Flask - sem modificar codigo.
+#
+# Para testar:
+#   kubectl apply -k monitoring/tests/apps
+#   ./monitoring/tests/setup-lab.sh
+# =====================================================================
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -66,9 +74,10 @@ spec:
       labels:
         app: api-pedidos
       annotations:
-        # [ATENCAO] Annotation que ativa auto-instrumentation Python
-        # O OTEL Operator injeta um init container com o agente OTel
-        # que captura traces/metricas automaticamente
+        # [ATENCAO] Auto-instrumentation Python
+        # O Operator injeta init container que copia o agente OTel
+        # e configura OTEL_EXPORTER_OTLP_ENDPOINT automaticamente.
+        # Nao precisa modificar o Dockerfile nem o codigo.
         instrumentation.opentelemetry.io/inject-python: "true"
     spec:
       containers:

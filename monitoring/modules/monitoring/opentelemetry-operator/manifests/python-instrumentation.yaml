@@ -1,0 +1,45 @@
+# =====================================================================
+# Instrumentation - Auto-instrumentacao Python
+# =====================================================================
+# Recurso gerenciado pelo OTEL Operator (CRD: opentelemetry.io/v1alpha1).
+#
+# O que faz: Configura o Operator para injetar automaticamente o agente
+# OTel Python em pods com a annotation:
+#   instrumentation.opentelemetry.io/inject-python: "true"
+#
+# O agente captura traces/metricas de forma automatica de:
+# - Flask, Django, FastAPI (HTTP requests/responses)
+# - Requests, urllib (chamadas HTTP externas)
+# - SQLAlchemy, psycopg2 (queries no banco)
+# - Redis, Kafka, etc
+#
+# [ATENCAO] O Operator tenta injetar sidecar E auto-instrumentation
+# simultaneamente. Se nao houver um OpenTelemetryCollector sidecar
+# no namespace, o webhook falha ao injetar sidecar (log de erro),
+# MAS a auto-instrumentation funciona independentemente.
+#
+# Linguagens suportadas (cada uma precisa de um recurso Instrumentation):
+# - Python:   instrumentation.opentelemetry.io/inject-python: "true"
+# - Java:     instrumentation.opentelemetry.io/inject-java: "true"
+# - Node.js:  instrumentation.opentelemetry.io/inject-nodejs: "true"
+# - .NET:     instrumentation.opentelemetry.io/inject-dotnet: "true"
+#
+# [ATENCAO] Sem modificar codigo!
+# A auto-instrumentation injeta um init container que copia o agente
+# e configura variaveis de ambiente (OTEL_EXPORTER_OTLP_ENDPOINT, etc).
+# =====================================================================
+apiVersion: opentelemetry.io/v1alpha1
+kind: Instrumentation
+metadata:
+  name: python-instrumentation
+  namespace: otel-test
+spec:
+  exporter:
+    # Aponta para o Collector centralizado via OTLP HTTP
+    endpoint: http://opentelemetry-collector.monitoring.svc.cluster.local:4318
+  propagators:
+    - tracecontext
+    - baggage
+  sampler:
+    type: parentbased_traceidratio
+    argument: "1"
