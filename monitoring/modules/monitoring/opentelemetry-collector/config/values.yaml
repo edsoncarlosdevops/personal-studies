@@ -48,7 +48,7 @@ config:
 
     # 🔹 [PRODUÇÃO] EXEMPLO: Receptor Kubelet Stats (Métricas de containers/pods diretamente do node)
     # kubeletstats:
-    #   endpoint: https://${env:KUBE_NODE_NAME}:10250
+    #   endpoint: https://$${env:KUBE_NODE_NAME}:10250
     #   auth_type: serviceAccount
     #   insecure_skip_verify: true
     #   collection_interval: 15s
@@ -65,7 +65,7 @@ config:
     batch:
       timeout: 5s              # Tempo máximo de espera antes de forçar o envio de um lote
       send_batch_size: 1024    # Quantidade ideal de itens por lote
-      timeout_trigger_send_batch_size: 1536 # Gatilho para enviar antes do timeout se o lote for grande
+       # Gatilho para enviar antes do timeout se o lote for grande
 
     # 🔹 [PRODUÇÃO] IMPORTANTÍSSIMO: Memory Limiter (Evita crash por OOM - Out Of Memory)
     # memory_limiter:
