@@ -1,15 +1,16 @@
 #!/bin/bash
 # =====================================================================
-# setup-lab.sh - Configura ambiente de teste do OTEL Operator
+# setup-lab.sh - Configura ambiente de teste de auto-instrumentacao
 # =====================================================================
 # Script automatizado que:
 #   1. Cria namespace otel-test
-#   2. Aplica os manifests do OTEL Operator (OpenTelemetryCollector +
-#      Instrumentation Python) que estao em:
-#      monitoring/modules/monitoring/opentelemetry-operator/config/
-#   3. Sobe app de exemplo (api-pedidos com auto-instrumentation)
-#   4. Gera trafego HTTP automaticamente
-#   5. Verifica traces no Tempo
+#   2. Sobe app de exemplo (api-pedidos com auto-instrumentation)
+#   3. Gera trafego HTTP automaticamente
+#   4. Verifica traces no Tempo
+#
+# [ATENCAO] O OTEL Operator e o recurso Instrumentation ja sao
+# instalados via Terragrunt no modulo opentelemetry-operator.
+# Nao e necessario aplicar manifests manuais de Instrumentation.
 #
 # Uso:
 #   chmod +x setup-lab.sh
@@ -20,10 +21,6 @@
 #
 # Estrutura de diretorios:
 #   monitoring/
-#     modules/monitoring/opentelemetry-operator/
-#       config/                            <- Recursos do Operator (CRDs)
-#         otel-sidecar.yaml
-#         python-instrumentation.yaml
 #     tests/
 #       setup-lab.sh                       <- Script de automacao
 #       apps/                              <- Apps de exemplo para teste
@@ -33,13 +30,11 @@
 set -e
 
 NAMESPACE="otel-test"
-# Caminho relativo para os manifests do Operator e apps de teste
-OPERATOR_MANIFESTS="../modules/monitoring/opentelemetry-operator/config"
 APPS_DIR="apps"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 echo "=============================================="
-echo "  Setup do Ambiente de Teste OTEL Operator"
+echo "  Setup do Ambiente de Teste OTEL"
 echo "=============================================="
 echo "Namespace: $NAMESPACE"
 echo ""
@@ -47,33 +42,14 @@ echo ""
 # -----------------------------------------------------------------
 # Passo 1: Cria o namespace
 # -----------------------------------------------------------------
-echo "[1/6] Criando namespace $NAMESPACE..."
+echo "[1/4] Criando namespace $NAMESPACE..."
 kubectl create namespace $NAMESPACE --dry-run=client -o yaml | kubectl apply -f -
 
 # -----------------------------------------------------------------
-# Passo 2: Aplica os manifests do OTEL Operator
-# -----------------------------------------------------------------
-echo "[2/6] Aplicando OpenTelemetryCollector sidecar..."
-kubectl apply -f $SCRIPT_DIR/$OPERATOR_MANIFESTS/otel-sidecar.yaml
-
-echo "[3/6] Aplicando Instrumentation Python..."
-kubectl apply -f $SCRIPT_DIR/$OPERATOR_MANIFESTS/python-instrumentation.yaml
-
-# -----------------------------------------------------------------
-# Passo 3: Aguarda os recursos ficarem prontos
-# -----------------------------------------------------------------
-echo "[4/6] Aguardando recursos do Operator..."
-sleep 5
-echo ""
-echo "Recursos criados:"
-kubectl get opentelemetrycollector -n $NAMESPACE
-kubectl get instrumentation -n $NAMESPACE
-
-# -----------------------------------------------------------------
-# Passo 4: Sobe as aplicacoes de exemplo
+# Passo 2: Sobe as aplicacoes de exemplo
 # -----------------------------------------------------------------
 echo ""
-echo "[5/6] Subindo aplicacao de exemplo..."
+echo "[2/4] Subindo aplicacao de exemplo..."
 kubectl apply -f $SCRIPT_DIR/$APPS_DIR/api-pedidos.yaml
 
 echo ""
@@ -87,10 +63,10 @@ echo "Pods rodando:"
 kubectl get pods -n $NAMESPACE
 
 # -----------------------------------------------------------------
-# Passo 5: Gera trafego nas APIs
+# Passo 3: Gera trafego nas APIs
 # -----------------------------------------------------------------
 echo ""
-echo "[6/6] Gerando trafego de teste..."
+echo "[3/4] Gerando trafego de teste..."
 echo "  - API Pedidos (auto-instrumentation)..."
 for i in $(seq 1 10); do
   kubectl exec -n monitoring deployment/grafana -- sh -c \
@@ -111,7 +87,7 @@ echo "=============================================="
 echo "  VERIFICACAO"
 echo "=============================================="
 echo ""
-echo "Aguardando 10s para processamento dos traces..."
+echo "[4/4] Aguardando 10s para processamento dos traces..."
 sleep 10
 
 echo "Traces encontrados no Tempo:"
