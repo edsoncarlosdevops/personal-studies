@@ -13,5 +13,4 @@ manager:
 
   env:
     # Habilita auto-instrumentacao (injeta agent OTel em Pods com annotations)
-    - name: ENABLE_WEBHOOKS
-      value: "true"
+    ENABLE_WEBHOOKS: "true"

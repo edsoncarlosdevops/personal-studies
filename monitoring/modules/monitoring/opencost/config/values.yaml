@@ -6,9 +6,6 @@
 opencost:
   exporter:
     defaultClusterId: ${opencost_cluster_id}
-    extraEnv:
-      - name: CLOUD_PROVIDER_API_KEY
-        value: "" # Deixar vazio para ambiente lab (calcula precos basedos em on-prem)
 
   prometheus:
     # URL interna do Prometheus Server no cluster
