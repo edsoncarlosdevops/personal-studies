@@ -6,13 +6,6 @@
 # o erro "context deadline exceeded" e warnings de resource policy.
 # ═══════════════════════════════════════════════════════════
 
-data "kubernetes_secret" "argocd_admin" {
-  metadata {
-    name      = "argocd-initial-admin-secret"
-    namespace = "argocd"
-  }
-}
-
 resource "helm_release" "argocd" {
   name             = "argocd"
   repository       = "https://argoproj.github.io/argo-helm"
@@ -28,8 +21,22 @@ resource "helm_release" "argocd" {
   timeout          = 120
 
   values = [file("${path.module}/values/values.yaml")]
+}
 
-  depends_on = [data.kubernetes_secret.argocd_admin]
+# ═══════════════════════════════════════════════════════════
+# Data source para obter a senha do admin APOS o Helm criar
+# ═══════════════════════════════════════════════════════════
+# Usa depends_on para so consultar o secret depois que o
+# Helm release estiver instalado.
+# ═══════════════════════════════════════════════════════════
+
+data "kubernetes_secret" "argocd_admin" {
+  metadata {
+    name      = "argocd-initial-admin-secret"
+    namespace = "argocd"
+  }
+
+  depends_on = [helm_release.argocd]
 }
 
 # ═══════════════════════════════════════════════════════════
@@ -48,12 +55,12 @@ resource "null_resource" "cleanup_argocd" {
   provisioner "local-exec" {
     when    = destroy
     command = <<-EOT
-      echo "🧹 Limpando recursos do ArgoCD antes do destroy..."
+      echo "Limpando recursos do ArgoCD antes do destroy..."
       kubectl delete crd applications.argoproj.io --ignore-not-found --wait=false 2>/dev/null || true
       kubectl delete crd applicationsets.argoproj.io --ignore-not-found --wait=false 2>/dev/null || true
       kubectl delete crd appprojects.argoproj.io --ignore-not-found --wait=false 2>/dev/null || true
       kubectl delete namespace argocd --ignore-not-found --wait=false 2>/dev/null || true
-      echo "✅ Recursos do ArgoCD removidos"
+      echo "Recursos do ArgoCD removidos"
     EOT
   }
 }
