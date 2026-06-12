@@ -9,6 +9,7 @@ resource "helm_release" "loki" {
   timeout          = 600
   force_update     = true
   cleanup_on_fail  = true
+  upgrade_install  = true
 
   values = [
     templatefile("${path.module}/config/values.yaml", {

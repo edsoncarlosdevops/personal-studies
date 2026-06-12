@@ -10,6 +10,9 @@ resource "helm_release" "opentelemetry_collector" {
   namespace        = var.otel_collector_namespace
   version          = var.otel_collector_chart_version
   repository       = var.otel_collector_repository_url
+  force_update     = true
+  cleanup_on_fail  = true
+  upgrade_install  = true
 
   values = [
     templatefile("${path.module}/config/values.yaml", {

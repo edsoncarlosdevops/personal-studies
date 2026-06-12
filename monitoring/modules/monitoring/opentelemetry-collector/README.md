@@ -44,6 +44,7 @@ Para onde os dados sao enviados:
 |----------|---------|--------|
 | otlp | Tempo (:4317) | Envia traces para o Tempo |
 | prometheus | :8889 | Expoe metricas para o Prometheus raspar |
+| loki (OTLP) | Loki (:3100/otlp/v1/logs) | Envia logs para o Loki |
 | prometheusremotewrite | Grafana Cloud / AMP | Envia metricas para cloud |
 
 ## Modos de Deploy
@@ -97,6 +98,7 @@ Para onde os dados sao enviados:
 ### Exporters habilitados:
 - **OTLP** -> Tempo (traces)
 - **Prometheus** -> :8889 (metricas)
+- **Loki (OTLP)** -> :3100/otlp/v1/logs (logs)
 
 ### Sugestoes para producao (comentadas no values.yaml):
 - Descomentar memory_limiter (evitar OOM)
@@ -116,22 +118,25 @@ Para onde os dados sao enviados:
 ## Fluxo Atual no Projeto
 
 ```
-Apps com SDK OTel
-       |
-       v (OTLP gRPC :4317)
-OTEL Collector (deployment)
-       |
-   +---+---+
-   |       |
-   v       v
- Tempo   Prometheus (:8889)
-(traces)  (metricas)
-   |       |
-   +---+---+
+     Apps com SDK OTel
+           |
+           v (OTLP gRPC :4317)
+     OTEL Collector (deployment)
+           |
+   +---+---+-------+
+   |       |       |
+   v       v       v
+ Tempo   Prometheus  Loki
+(traces) (:8889)    (OTLP HTTP)
+         (metricas)  (logs)
+   |       |       |
+   +---+---+---+
        |
        v
    Grafana
 ```
+
+> O OpenTelemetry SDK coleta os 3 pilares (traces, metricas, logs) e envia tudo via OTLP para o Collector, que roteia para os backends corretos. **Nenhum agente externo (Promtail, Fluentd, etc.) é necessario.**
 
 ## Como testar
 

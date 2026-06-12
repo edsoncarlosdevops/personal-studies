@@ -37,6 +37,16 @@ loki:
           prefix: index_
           period: 24h
 
+  # Habilita ingestao via OTLP (OpenTelemetry Protocol)
+  # Permite que o OTEL Collector envie logs diretamente para o Loki
+  otlp_config:
+    logs:
+      enabled: true
+
+  server:
+    http_listen_port: 3100
+    grpc_listen_port: 9095
+
 singleBinary:
   replicas: 1
   persistence:

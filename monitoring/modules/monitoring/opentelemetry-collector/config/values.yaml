@@ -59,6 +59,17 @@ config:
       resource_to_telemetry_conversion:
         enabled: true
 
+    # Exporta logs para o Loki via OTLP HTTP
+    # Loki usa a porta 3100 para API HTTP (push/query)
+    loki:
+      endpoint: "loki.monitoring.svc.cluster.local:3100/otlp/v1/logs"
+      tls:
+        insecure: true
+      sending_queue:
+        enabled: true
+        num_consumers: 4
+        queue_size: 1000
+
   service:
     pipelines:
       traces:
@@ -69,6 +80,10 @@ config:
         receivers: [otlp]
         processors: [batch]
         exporters: [prometheus]
+      logs:
+        receivers: [otlp]
+        processors: [batch]
+        exporters: [loki]
 
     telemetry:
       logs:
