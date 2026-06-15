@@ -1,0 +1,48 @@
+groups:
+  - name: postgresql
+    interval: 30s
+    rules:
+      - alert: PostgreSQLDown
+        expr: pg_up == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "PostgreSQL down (instance {{ $labels.instance }})"
+          description: "PostgreSQL server {{ $labels.instance }} is unreachable."
+
+      - alert: PostgreSQLHighConnections
+        expr: pg_stat_database_numbackends > 80
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "PostgreSQL high connections (instance {{ $labels.instance }})"
+          description: "PostgreSQL has {{ $value }} active connections, above 80."
+
+      - alert: PostgreSQLTableSizeHigh
+        expr: pg_database_size_bytes > 1e10
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "PostgreSQL database size high"
+          description: "Database is {{ $value | humanize1024 }} large."
+
+      - alert: PostgreSQLDeadlocks
+        expr: rate(pg_stat_database_deadlocks[5m]) > 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "PostgreSQL deadlocks detected (instance {{ $labels.instance }})"
+          description: "Deadlocks detected in database {{ $labels.datname }}."
+
+      - alert: PostgreSQLCacheHitRatio
+        expr: (rate(pg_stat_database_blks_hit[5m]) / (rate(pg_stat_database_blks_hit[5m]) + rate(pg_stat_database_blks_read[5m]))) * 100 < 90
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "PostgreSQL cache hit ratio low (instance {{ $labels.instance }})"
+          description: "Cache hit ratio is {{ $value }}%, below 90%."
