@@ -61,6 +61,18 @@ echo ""
 echo "[3/3] Destruindo infra AWS..."
 if [ -d "aws/eks_rds" ]; then
   cd aws/eks_rds
+
+  # Antes do destroy, remove do state os recursos que dependem
+  # do cluster EKS (Helm, Kubernetes), para evitar o erro:
+  #   "uninstall: Failed to purge the release: release: not found"
+  # quando o cluster EKS ja foi derrubado.
+  echo "  → Removendo resources Kubernetes/Helm do state (se existirem)..."
+  terraform state rm 'module.argocd.helm_release.argocd' 2>/dev/null || true
+  terraform state rm 'module.argocd.null_resource.wait_for_nodes_ready' 2>/dev/null || true
+  terraform state rm 'data.kubernetes_secret.argocd_admin' 2>/dev/null || true
+  terraform state rm 'module.argocd.null_resource.cleanup_argocd' 2>/dev/null || true
+  echo "  ✅ Resources Helm/K8s removidos do state (se existiam)"
+
   terraform destroy -auto-approve 2>/dev/null && \
     echo "  ✅ Infra AWS destruida com sucesso!" || {
     echo "  ⚠️  Primeira tentativa falhou. Tentando novamente..."

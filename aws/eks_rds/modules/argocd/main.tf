@@ -4,6 +4,12 @@
 # O Helm cria o namespace automaticamente (create_namespace).
 # Em destroy, os CRDs sao removidos via local-exec, evitando
 # o erro "context deadline exceeded" e warnings de resource policy.
+#
+# IMPORTANTE: Se o cluster EKS ja foi destruido, o Terraform
+# trava ao tentar desinstalar o Helm release (release not found).
+# A solucao usa um `null_resource` com `local-exec` no destroy
+# que remove o helm_release do state ANTES do Helm tentar
+# desinstalar, via o `helm_release.argocd` depender dele.
 # ═══════════════════════════════════════════════════════════
 
 resource "helm_release" "argocd" {
@@ -21,6 +27,36 @@ resource "helm_release" "argocd" {
   timeout          = 120
 
   values = [file("${path.module}/values/values.yaml")]
+}
+
+# ═══════════════════════════════════════════════════════════
+# Prevencao de falha no destroy do Helm release
+# ═══════════════════════════════════════════════════════════
+# Se o cluster EKS ja foi destruido (ou esta inacessivel),
+# o Terraform tenta desinstalar o Helm e falha com:
+#   "uninstall: Failed to purge the release: release: not found"
+#
+# Este resource roda ANTES do helm_release ser destruido
+# (via depends_on) e remove o helm_release.argocd do state
+# do Terraform. Assim o Helm nao precisa conectar no cluster.
+# ═══════════════════════════════════════════════════════════
+
+resource "null_resource" "prevent_helm_destroy_failure" {
+  triggers = {
+    uuid = uuid()
+  }
+
+  provisioner "local-exec" {
+    when    = destroy
+    command = <<-EOT
+      echo "[prevent_helm_destroy_failure] Removendo helm_release.argocd do state..."
+      terraform state rm 'module.argocd.helm_release.argocd' 2>/dev/null || \
+        echo "[prevent_helm_destroy_failure] Ja foi removido ou state remoto bloqueou"
+      echo "[prevent_helm_destroy_failure] OK"
+    EOT
+  }
+
+  depends_on = [helm_release.argocd]
 }
 
 # ═══════════════════════════════════════════════════════════
