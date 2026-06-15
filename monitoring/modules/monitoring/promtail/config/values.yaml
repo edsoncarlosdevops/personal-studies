@@ -6,7 +6,7 @@
 # Fluxo:
 #   Pod (stdout/stderr) -> containerd -> /var/log/pods/ -> Promtail -> Loki
 #
-# Labels injetadas por padrao:
+# Labels injetadas:
 #   namespace, pod, container, app, job, node_name
 #
 # [ATENCAO] RUNTIME CONTAINERD (EKS):
@@ -18,22 +18,29 @@
 # O chart do Promtail v6.x usa loki-gateway como default para clients[0].url.
 # Como usamos Loki em modo SingleBinary (sem gateway), precisamos apontar
 # diretamente para http://loki:3100/loki/api/v1/push.
+#
+# [ATENCAO] PROBLEMA CONHECIDO - loki-gateway persiste apos terragrunt apply:
+# O chart v6.x do Promtail possui um helper template que monta o config.yaml
+# final COMBINANDO valores. Mesmo passando clients[0].url no values.yaml,
+# o chart sobrescreve com o valor de $loki.address (default: loki-gateway)
+# nos templates internos.
+# SOLUCAO: Apos terragrunt apply, executar via Helm:
+#   helm upgrade promtail grafana/promtail -n monitoring --version 6.16.6 \
+#     --set config.clients[0].url=http://loki.monitoring.svc:3100/loki/api/v1/push \
+#     --reset-values
+#
+# [ATENCAO] scrapeConfigs com __path__ manual:
+# Quando usamos config.snippets.scrapeConfigs, o chart substitui
+# COMPLETAMENTE o scrape_config padrao. Perdemos as regras de __path__
+# que o chart inclui por padrao. Por isso replicamos manualmente
+# no relabel_configs abaixo.
 # =============================================================================
 
-# ═══════════════════════════════════════════════════════
-# [CORRIGIDO] Usar clients em vez de config.lokiAddress
-# O chart do Promtail v6.x nao mapeia lokiAddress para
-# clients[0].url. O default (loki-gateway) nao existe
-# no nosso setup (Loki SingleBinary sem gateway).
-# O endpoint ${promtail_loki_endpoint} vem do template via terragrunt.hcl
-# ═══════════════════════════════════════════════════════
 clients:
   - url: ${promtail_loki_endpoint}
 
 config:
-  # [CORRIGIDO] logPath explicito para containerd (EKS)
-  # No EKS, o runtime e containerd, nao Docker.
-  # Os logs dos pods estao em /var/log/pods/, nao em /var/lib/docker/containers
+  # Path explicito para containerd (EKS)
   logPath: /var/log/pods
   snippets:
     scrapeConfigs: |
@@ -43,12 +50,44 @@ config:
         kubernetes_sd_configs:
           - role: pod
         relabel_configs:
+          # --- Labels basicas ---
           - source_labels: [__meta_kubernetes_namespace]
             target_label: namespace
           - source_labels: [__meta_kubernetes_pod_name]
             target_label: pod
           - source_labels: [__meta_kubernetes_pod_container_name]
             target_label: container
+          # --- Labels de correlacao (metricas via OTEL SDK) ---
+          - source_labels: [__meta_kubernetes_pod_label_app]
+            target_label: app
+          - source_labels: [__meta_kubernetes_pod_label_app_kubernetes_io_name]
+            target_label: app
+          - source_labels: [__meta_kubernetes_pod_node_name]
+            target_label: node_name
+          # --- Label job = namespace/app ---
+          - action: replace
+            replacement: $1
+            separator: /
+            source_labels: [namespace, app]
+            target_label: job
+          # --- __path__ baseado em pod_uid + container_name ---
+          - action: replace
+            replacement: /var/log/pods/*$1/*.log
+            separator: /
+            source_labels:
+              - __meta_kubernetes_pod_uid
+              - __meta_kubernetes_pod_container_name
+            target_label: __path__
+          # --- __path__ fallback (annotation kubernetes.io/config.hash) ---
+          - action: replace
+            regex: true/(.*)
+            replacement: /var/log/pods/*$1/*.log
+            separator: /
+            source_labels:
+              - __meta_kubernetes_pod_annotationpresent_kubernetes_io_config_hash
+              - __meta_kubernetes_pod_annotation_kubernetes_io_config_hash
+              - __meta_kubernetes_pod_container_name
+            target_label: __path__
 
 serviceAccount:
   create: true
@@ -58,9 +97,7 @@ rbac:
   create: true
   pspEnabled: false
 
-# [CORRIGIDO] Volumes para EKS com containerd
-# O chart do Promtail v6.x monta /var/lib/docker/containers por padrao,
-# que nao existe no EKS (usa containerd). Precisamos montar /var/log/pods.
+# Volumes para EKS com containerd
 volumes:
   - name: logs
     hostPath:
