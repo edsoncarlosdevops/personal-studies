@@ -26,7 +26,7 @@
         },
         "targets": [
           {
-            "expr": "topk(5, sum(rate(container_cpu_usage_seconds_total{container!=\"\"}[1m])) by (container, namespace))",
+            "expr": "topk(5, sum(rate(container_cpu_usage_seconds_total{namespace!=\"\"}[5m])) by (container, namespace))",
             "legendFormat": "{{namespace}}/{{container}}"
           }
         ]
@@ -47,7 +47,7 @@
         },
         "targets": [
           {
-            "expr": "topk(5, sum(container_memory_working_set_bytes{container!=\"\"}) by (container, namespace))",
+            "expr": "topk(5, sum(container_memory_working_set_bytes{namespace!=\"\"}) by (container, namespace))",
             "legendFormat": "{{namespace}}/{{container}}"
           }
         ],
