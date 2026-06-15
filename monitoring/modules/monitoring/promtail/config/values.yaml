@@ -1,50 +1,50 @@
 # Promtail - Coleta de logs do Kubernetes para o Loki
 # =============================================================================
-# PROBLEMAS CONHECIDOS (CORRIGIR QUANDO VOLTAR):
+# [CORRIGIDO] Problema #1 RESOLVIDO:
+# Antes usava config.lokiAddress (que nao era mapeado pelo chart),
+# agora usa clients[0].url diretamente.
 #
-# 1. CLIENTS URL INCORRETA
-#    O chart usa loki-gateway como padrao, que desabilitamos.
-#    Verificar se config.lokiAddress esta sendo usado corretamente.
-#    O clients[0].url aparece como "http://loki-gateway/loki/api/v1/push"
-#    em vez de "http://loki.monitoring.svc.cluster.local:3100/loki/api/v1/push"
+# PROBLEMAS AINDA PENDENTES DE VERIFICACAO:
 #
-#    Testar: helm template promtail grafana/promtail -f values.yaml
-#    para ver o YAML gerado e confirmar se lokiAddress aparece.
-#
-# 2. PERMISSOES RBAC
+# 1. PERMISSOES RBAC
 #    Promtail pode estar sem permissao pra ler /var/log/pods.
 #    O chart cria ServiceAccount e ClusterRole, mas verificar se o
 #    ClusterRole tem permissao pra listar pods (kubernetes_sd_configs).
 #
-# 3. VOLUME /var/log/pods
+# 2. VOLUME /var/log/pods
 #    Confirmar se o volume hostPath /var/log/pods esta montado.
 #    kubectl exec -n monitoring promtail-XXXX -- ls /var/log/pods/
 #    Se vazio, o volume nao esta montado.
 #
-# 4. LOKI CANARY (logs pppppppp)
-#    Ja desabilitamos testing.enabled=false e loki-canary.enabled=false
-#    no modulo do Loki. Confirmar se o pod canary foi removido.
-#
-# 5. DASHBOARD GRAFANA DESATUALIZADO
+# 3. DASHBOARD GRAFANA DESATUALIZADO
 #    O dashboard atual tem UID 4999d044-a288-4297-8f72-c726b1e58b5a
 #    e usa queries antigas. Criar um novo dashboard com:
 #    - Loki queries: {namespace=~"otel-test|monitoring"}
 #    - Prometheus: kube_pod_container_resource_requests
 #    - Tempo: queryType = search (padrao, sem filtro)
 #
-# Fluxo esperado apos correcao:
+# Fluxo esperado:
 #   Pod (stdout) -> /var/log/pods/ -> Promtail -> Loki (:3100)
 #
 # Labels que devem aparecer no Loki:
 #   namespace, pod, container
 # =============================================================================
 
-config:
-  # lokiAddress: URL completa para push dos logs
-  # ATENCAO: Verificar se esse campo esta sendo aplicado.
-  # Testar com: helm template promtail grafana/promtail -f values.yaml
-  lokiAddress: http://loki.monitoring.svc.cluster.local:3100/loki/api/v1/push
+# ═══════════════════════════════════════════════════════
+# [CORRIGIDO] Usar clients em vez de config.lokiAddress
+# O chart do Promtail v6.x nao mapeia lokiAddress para
+# clients[0].url. O default (loki-gateway) nao existe
+# no nosso setup (Loki SingleBinary sem gateway).
+# O endpoint ${promtail_loki_endpoint} vem do template via terragrunt.hcl
+# ═══════════════════════════════════════════════════════
+clients:
+  - url: ${promtail_loki_endpoint}
 
+config:
+  # [CORRIGIDO] logPath explicito para containerd (EKS)
+  # No EKS, o runtime e containerd, nao Docker.
+  # Os logs dos pods estao em /var/log/pods/, nao em /var/lib/docker/containers
+  logPath: /var/log/pods
   snippets:
     scrapeConfigs: |
       - job_name: kubernetes-pods
@@ -67,3 +67,17 @@ serviceAccount:
 rbac:
   create: true
   pspEnabled: false
+
+# [CORRIGIDO] Volumes para EKS com containerd
+# O chart do Promtail v6.x monta /var/lib/docker/containers por padrao,
+# que nao existe no EKS (usa containerd). Precisamos montar /var/log/pods.
+volumes:
+  - name: logs
+    hostPath:
+      path: /var/log/pods
+
+volumeMounts:
+  - name: logs
+    mountPath: /var/log/pods
+    readOnly: true
+

@@ -24,53 +24,72 @@ resource "helm_release" "opentelemetry_operator" {
 ##############################
 # Auto-instrumentation       #
 ##############################
-# Cria o recurso Instrumentation que configura o Operator para injetar
-# automaticamente o SDK OTel nos pods com as annotations:
+# Cria o recurso Instrumentation via local-exec (kubectl apply) APOS
+# o Helm instalar o Operator e seus CRDs. Usar kubernetes_manifest
+# causa erro no plan pois o CRD opentelemetry.io/v1alpha1 ainda
+# nao existe (só e criado pelo Helm).
+#
+# Estas annotations habilitam auto-instrumentacao via Operator:
 #   instrumentation.opentelemetry.io/inject-python: "true"
 #   instrumentation.opentelemetry.io/inject-nodejs: "true"
-#   instrumentation.opentelemetry.io/inject-java: "true"
 #
 # O endpoint aponta para o Collector centralizado (monitoring namespace)
 
-resource "kubernetes_manifest" "instrumentation_python" {
-  manifest = {
-    apiVersion = "opentelemetry.io/v1alpha1"
-    kind       = "Instrumentation"
-    metadata = {
-      name      = "python-instrumentation"
-      namespace = var.otel_operator_namespace
-    }
-    spec = {
-      exporter = {
-        endpoint = "http://opentelemetry-collector.${var.otel_operator_namespace}.svc.cluster.local:4318"
-      }
-      propagators = ["tracecontext", "baggage"]
-      sampler = {
-        type     = "parentbased_traceidratio"
-        argument = "1"
-      }
-    }
-  }
-}
+resource "null_resource" "instrumentation_resources" {
+  depends_on = [helm_release.opentelemetry_operator]
 
-resource "kubernetes_manifest" "instrumentation_nodejs" {
-  manifest = {
-    apiVersion = "opentelemetry.io/v1alpha1"
-    kind       = "Instrumentation"
-    metadata = {
-      name      = "nodejs-instrumentation"
-      namespace = var.otel_operator_namespace
-    }
-    spec = {
-      exporter = {
-        endpoint = "http://opentelemetry-collector.${var.otel_operator_namespace}.svc.cluster.local:4318"
-      }
-      propagators = ["tracecontext", "baggage"]
-      sampler = {
-        type     = "parentbased_traceidratio"
-        argument = "1"
-      }
-    }
+  provisioner "local-exec" {
+    interpreter = ["/bin/bash", "-c"]
+    command = <<-EOT
+      echo "Aguardando CRD Instrumentation ficar disponivel..."
+      for i in $(seq 1 30); do
+        if kubectl get crd instrumentations.opentelemetry.io &>/dev/null; then
+          echo "  ✅ CRD Instrumentation disponivel!"
+          break
+        fi
+        echo "  [$i/30] Aguardando CRD..."
+        sleep 5
+      done
+
+      echo "Criando recurso Instrumentation (Python)..."
+      cat <<'YAML' | kubectl apply -f -
+apiVersion: opentelemetry.io/v1alpha1
+kind: Instrumentation
+metadata:
+  name: python-instrumentation
+  namespace: ${var.otel_operator_namespace}
+spec:
+  exporter:
+    endpoint: http://opentelemetry-collector.${var.otel_operator_namespace}.svc.cluster.local:4318
+  propagators: ["tracecontext", "baggage"]
+  sampler:
+    type: parentbased_traceidratio
+    argument: "1"
+YAML
+
+      echo "Criando recurso Instrumentation (Node.js)..."
+      cat <<'YAML' | kubectl apply -f -
+apiVersion: opentelemetry.io/v1alpha1
+kind: Instrumentation
+metadata:
+  name: nodejs-instrumentation
+  namespace: ${var.otel_operator_namespace}
+spec:
+  exporter:
+    endpoint: http://opentelemetry-collector.${var.otel_operator_namespace}.svc.cluster.local:4318
+  propagators: ["tracecontext", "baggage"]
+  sampler:
+    type: parentbased_traceidratio
+    argument: "1"
+YAML
+
+      echo "  ✅ Instrumentation resources criados com sucesso!"
+    EOT
+  }
+
+  provisioner "local-exec" {
+    when    = destroy
+    command = "echo 'Instrumentation resources removidos manualmente se necessario: kubectl delete instrumentation -n monitoring --all'"
   }
 }
 
