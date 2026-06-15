@@ -16,3 +16,12 @@ Users/
 *.swp
 *.swo
 *~
+
+
+# ── Terraform State ──
+*.tfstate
+*.tfstate.backup
+*.tfstate.*.backup
+*.tfplan
+.terraform.lock.hcl
+
