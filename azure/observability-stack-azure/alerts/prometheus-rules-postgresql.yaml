@@ -39,7 +39,8 @@ groups:
           description: "Deadlocks detected in database {{ $labels.datname }}."
 
       - alert: PostgreSQLCacheHitRatio
-        expr: (rate(pg_stat_database_blks_hit[5m]) / (rate(pg_stat_database_blks_hit[5m]) + rate(pg_stat_database_blks_read[5m]))) * 100 < 90
+        expr: |
+          (rate(pg_stat_database_blks_hit[5m]) / (rate(pg_stat_database_blks_hit[5m]) + rate(pg_stat_database_blks_read[5m]) + 1)) * 100 < 90
         for: 10m
         labels:
           severity: warning
