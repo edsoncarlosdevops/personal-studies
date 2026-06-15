@@ -10,7 +10,7 @@ groups:
           severity: critical
         annotations:
           summary: "Pod CrashLoopBackOff: {{ $labels.namespace }}/{{ $labels.pod }}"
-          description: "Pod {{ $labels.pod }} in {{ $labels.namespace }} is restarting in a loop (CrashLoopBackOff)."
+          description: "Pod {{ $labels.pod }} in {{ $labels.namespace }} is restarting in a loop."
 
       - alert: PodRestartHigh
         expr: |
@@ -20,7 +20,7 @@ groups:
           severity: warning
         annotations:
           summary: "High pod restarts: {{ $labels.namespace }}/{{ $labels.pod }}"
-          description: "Pod {{ $labels.pod }} in {{ $labels.namespace }} restarted more than 3 times in the last 30 minutes."
+          description: "Pod {{ $labels.pod }} restarted >3 times in the last 30 minutes."
 
       - alert: PodNotReady
         expr: |
@@ -30,33 +30,11 @@ groups:
           severity: critical
         annotations:
           summary: "Pod not ready: {{ $labels.namespace }}/{{ $labels.pod }}"
-          description: "Pod {{ $labels.pod }} in {{ $labels.namespace }} has not been ready for more than 5 minutes."
+          description: "Pod {{ $labels.pod }} not ready for >5 minutes."
 
-  - name: resources
+  - name: nodes
     interval: 30s
     rules:
-      - alert: HighCPUUsage
-        expr: |
-          sum(rate(container_cpu_usage_seconds_total{namespace!=""}[5m])) by (namespace, container) / 
-          sum(kube_pod_container_resource_requests{resource="cpu"}) by (namespace, container) > 0.8
-        for: 10m
-        labels:
-          severity: warning
-        annotations:
-          summary: "High CPU: {{ $labels.namespace }}/{{ $labels.container }}"
-          description: "Container {{ $labels.container }} in {{ $labels.namespace }} is using >80% of CPU request for over 10 minutes."
-
-      - alert: HighMemoryUsage
-        expr: |
-          sum(container_memory_working_set_bytes{namespace!=""}) by (namespace, container) /
-          sum(kube_pod_container_resource_requests{resource="memory"}) by (namespace, container) > 0.8
-        for: 10m
-        labels:
-          severity: warning
-        annotations:
-          summary: "High memory: {{ $labels.namespace }}/{{ $labels.container }}"
-          description: "Container {{ $labels.container }} in {{ $labels.namespace }} is using >80% of memory request for over 10 minutes."
-
       - alert: NodeDiskSpace
         expr: |
           (node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"}) * 100 < 20
@@ -65,31 +43,40 @@ groups:
           severity: critical
         annotations:
           summary: "Node disk low: {{ $labels.node }}"
-          description: "Node {{ $labels.node }} has less than 20% disk space available."
+          description: "Node {{ $labels.node }} has <20% disk space."
+
+      - alert: NodeNotReady
+        expr: |
+          kube_node_status_condition{condition="Ready",status="true"} == 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Node not ready: {{ $labels.node }}"
+          description: "Node {{ $labels.node }} is not ready for >5 minutes."
 
   - name: application
     interval: 30s
     rules:
       - alert: HighRequestLatency
         expr: |
-          histogram_quantile(0.95, sum(rate(http_server_duration_seconds_bucket[5m])) by (le, service_name)) > 0.5
+          histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le)) > 0.5
         for: 5m
         labels:
           severity: warning
         annotations:
-          summary: "High latency: {{ $labels.service_name }}"
-          description: "P95 latency for {{ $labels.service_name }} is above 500ms for over 5 minutes."
+          summary: "High request latency"
+          description: "P95 latency is above 500ms for >5 minutes."
 
       - alert: HighErrorRate
         expr: |
-          sum(rate(http_server_duration_seconds_count{status_code=~"5.."}[5m])) by (service_name) /
-          sum(rate(http_server_duration_seconds_count[5m])) by (service_name) * 100 > 5
+          (sum(rate(http_requests_total{status=~"5.."}[5m])) / sum(rate(http_requests_total[5m]))) * 100 > 5
         for: 5m
         labels:
           severity: critical
         annotations:
-          summary: "High error rate: {{ $labels.service_name }}"
-          description: "Service {{ $labels.service_name }} has >5% HTTP 5xx errors in the last 5 minutes."
+          summary: "High error rate"
+          description: "HTTP 5xx error rate >5% in the last 5 minutes."
 
       - alert: PrometheusTargetDown
         expr: |
@@ -99,4 +86,4 @@ groups:
           severity: critical
         annotations:
           summary: "Prometheus target down: {{ $labels.job }}/{{ $labels.instance }}"
-          description: "Target {{ $labels.job }} ({{ $labels.instance }}) has been unreachable for over 2 minutes."
+          description: "Target {{ $labels.job }} ({{ $labels.instance }}) unreachable for >2 minutes."
