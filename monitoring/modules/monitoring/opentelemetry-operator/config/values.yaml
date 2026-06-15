@@ -1,8 +1,22 @@
-# OpenTelemetry Operator - Configuration System (Production Ready)
+# OpenTelemetry Operator - Configuration System
 # =====================================================================
 # O OpenTelemetry Operator gerencia automaticamente a injecao de
 # agentes OTel nos Pods atraves de annotations, sem modificar
 # o codigo das aplicacoes.
+#
+# Recursos gerenciados:
+# - OpenTelemetryCollector (CRD): sidecar ou standalone
+# - Instrumentation (CRD): auto-instrumentacao via SDK
+#
+# Annotation para auto-instrumentacao (exemplos):
+#   instrumentation.opentelemetry.io/inject-python: "true"
+#   instrumentation.opentelemetry.io/inject-nodejs: "true"
+#   instrumentation.opentelemetry.io/inject-java: "true"
+#
+# [ATENCAO] O Operator depende dos CRDs que sao instalados via Helm.
+# O recurso Instrumentation (criado no main.tf via local-exec)
+# so pode ser aplicado apos o Helm completar a instalacao dos CRDs.
+# =====================================================================
 
 replicaCount: 1
 
@@ -14,3 +28,4 @@ manager:
   env:
     # Habilita auto-instrumentacao (injeta agent OTel em Pods com annotations)
     ENABLE_WEBHOOKS: "true"
+

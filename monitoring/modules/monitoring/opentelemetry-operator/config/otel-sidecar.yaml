@@ -1,7 +1,11 @@
 # =====================================================================
-# OpenTelemetryCollector - Modo Sidecar
+# OpenTelemetryCollector - Modo Sidecar (documentacao de referencia)
 # =====================================================================
-# Recurso gerenciado pelo OTEL Operator (CRD: opentelemetry.io/v1alpha1).
+# ATENCAO: Este arquivo e apenas uma referencia/backup para uso manual
+# em namespaces de aplicacao. O Collector centralizado (monitoring)
+# e gerenciado pelo modulo opentelemetry-collector via Helm.
+#
+# Este recurso e gerenciado pelo OTEL Operator (CRD: opentelemetry.io/v1alpha1).
 #
 # O que faz: Cria uma instancia de collector que pode ser injetada como
 # sidecar em pods que tenham a annotation:
@@ -64,3 +68,4 @@ spec:
           receivers: [otlp]
           processors: [batch]
           exporters: [otlp]
+

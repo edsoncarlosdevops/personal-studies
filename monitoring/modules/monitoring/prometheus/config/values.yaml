@@ -2,10 +2,12 @@
 # =====================================================================
 # Prometheus coleta metricas via scraping HTTP e armazena em TSDB.
 #
-# Targets ativos (apenas os essenciais):
+# Targets de scrape configurados:
 # 1. prometheus (localhost:9090) - metricas do proprio servico
-# 2. opentelemetry-collector (:8889) - metricas via SDK OTel
-# 3. kubernetes-nodes (node-exporter :9100) - CPU/memoria dos EC2
+# 2. opentelemetry-collector (:8889) - metricas da aplicacao via SDK OTel
+# 3. kubernetes-nodes (node-exporter :9100) - metricas de CPU/memoria dos EC2
+# 4. kube-state-metrics (:8080) - metricas de objetos Kubernetes (pods, deployments)
+# =====================================================================
 
 alertmanager:
   enabled: false
@@ -37,6 +39,7 @@ server:
     name: prometheus-server
 
 # [ATENCAO] serverFiles sobrescreve TODA a config do Prometheus.
+# Nao usar alertmanager.rules ou outros blocos aqui, senao o padrao e perdido.
 serverFiles:
   prometheus.yml:
     scrape_configs:
@@ -46,7 +49,7 @@ serverFiles:
           - targets:
             - localhost:9090
 
-      # --- TARGET 2: OTEL Collector (metricas da app) ---
+      # --- TARGET 2: OTEL Collector (metricas da app via exporter prometheus) ---
       - job_name: opentelemetry-collector
         scrape_interval: 15s
         static_configs:
@@ -68,3 +71,4 @@ serverFiles:
         static_configs:
           - targets:
             - prometheus-kube-state-metrics.monitoring:8080
+

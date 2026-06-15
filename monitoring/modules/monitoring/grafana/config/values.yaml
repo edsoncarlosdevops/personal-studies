@@ -3,17 +3,16 @@
 # Grafana e a camada de visualizacao da stack de observabilidade.
 # Conecta-se a Prometheus, Loki e Tempo como datasources.
 #
-# [ATENCAO] PORTAS DOS DATASOURCES - Erro comum:
+# [ATENCAO] PORTAS DOS DATASOURCES:
 # Cada servico expoe portas DIFERENTES para ingestao vs consulta.
 # Configurar a porta errada = Bad Gateway ou 404 no Grafana.
 #
-# Resumo das portas de CONSULTA (usadas pelo Grafana):
+# Portas de CONSULTA (usadas pelo Grafana):
 # - Prometheus: porta 80 (service mapeia 9090 -> 80)
 # - Loki: 3100 (http_listen_port)
-# - Tempo: 3100 (http_listen_port) - NAO 3200, NAO 4317
-# - Tempo 4317 = OTLP gRPC (ingestao de dados, nao consulta)
-# - Tempo 4318 = OTLP HTTP (ingestao de dados, nao consulta)
-
+# - Tempo: 3100 (http_listen_port)
+#   NAO usar 4317 (OTLP gRPC - ingestao) nem 3200 (nao existe)
+# =====================================================================
 replicaCount: ${grafana_replica_count}
 
 # Senha fixa para ambiente dev/lab
@@ -56,8 +55,9 @@ datasources:
       - name: Tempo
         type: tempo
         access: proxy
-        # [ATENCAO] Porta 3100 = API de consulta do Tempo
+        # Porta 3100 = API de consulta do Tempo (http_listen_port)
         # Nao confundir com 4317 (OTLP gRPC - ingestao) ou 3200 (nao existe)
         url: http://tempo:3100
         jsonData:
           traces: true
+

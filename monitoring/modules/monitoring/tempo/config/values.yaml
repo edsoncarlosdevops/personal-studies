@@ -1,17 +1,18 @@
 # Grafana Tempo - Configuration System
 # =====================================================================
 # Tempo e um banco de dados de tracing distribuido.
+# Modo monolithic (single binary) para ambiente dev/lab.
 #
-# [ATENCAO] PORTAS CRITICAS:
+# Fluxo de dados:
+#   App (OTel SDK) -> OTEL Collector (:4317) -> Tempo (:4317 OTLP gRPC)
+#   Grafana -> Tempo (:3100) para consultar traces
+#
+# [ATENCAO] PORTAS:
 # - 3100: http_listen_port (API de consulta de traces - USADA PELO GRAFANA)
 # - 4317: OTLP gRPC (ingestao de traces - USADA PELO OTEL COLLECTOR)
 # - 4318: OTLP HTTP (ingestao de traces alternativa)
 # - 3200: NAO EXISTE (causa Bad Gateway se configurado no Grafana)
-#
-# [ATENCAO] FLUXO:
-# App (OTel SDK) -> OTEL Collector (:4317) -> Tempo (:4317)
-# Grafana -> Tempo (:3100) para consultar traces
-
+# =====================================================================
 mode: monolithic
 
 tempo:
@@ -52,3 +53,4 @@ resources:
   requests:
     cpu: 100m
     memory: 256Mi
+

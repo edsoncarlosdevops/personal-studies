@@ -1,20 +1,18 @@
 # ═══════════════════════════════════════════════════════════
 # Namespace - Módulo Transicional (vazio)
 # ═══════════════════════════════════════════════════════════
-# Este módulo não gerencia mais recursos.
-# Cada Helm chart cria seu próprio namespace via
-# create_namespace = true, eliminando conflitos.
+# Este modulo nao gerencia mais recursos diretamente.
+# Cada Helm chart cria seu proprio namespace via
+# create_namespace = true, eliminando conflitos de dependencia.
 #
-# Mantido apenas para compatibilidade com referências
-# existentes no repositório.
+# Mantido apenas para compatibilidade com referencias
+# existentes no repositorio (outputs e data sources).
 # ═══════════════════════════════════════════════════════════
 
-# Usa data source para verificar se existe (não falha)
+# Usa data source para verificar se existe (nao falha)
 data "kubernetes_namespace" "existing" {
   metadata {
     name = var.namespace_name
   }
 }
-
-
 

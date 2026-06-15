@@ -3,15 +3,24 @@
 # Loki e um sistema de agregacao de logs. Indexa apenas metadados
 # (labels), nao o texto completo, tornando o armazenamento barato.
 #
-# [ATENCAO] path_prefix - Erro comum:
+# Modo SingleBinary (sem gateway, sem backend/read/write separados).
+# Ideal para ambientes dev/lab.
+#
+# Fluxo:
+#   Pod (stdout) -> /var/log/pods/ -> Promtail -> Loki (:3100) -> Grafana
+#
+# [ATENCAO] path_prefix:
 # O container do Loki roda como user nao-root (UID 10001).
 # /var/loki NAO e writable por este user. Usar /tmp/loki como prefix.
 #
 # [ATENCAO] PORTAS:
-# - 3100: http_listen_port (API de consulta/ingestao - usada pelo Grafana)
-# - 9095: gRPC interno (comunicacao entre componentes)
-# - 9096: HTTP interno (nao usado em SingleBinary)
-
+# - 3100: http_listen_port (API de consulta/ingestao - usada pelo Grafana e Promtail)
+# - 9095: gRPC interno (comunicacao entre componentes, nao exposto)
+#
+# [ATENCAO] GATEWAY DESABILITADO:
+# Como usamos SingleBinary, o gateway e desnecessario.
+# O Promtail envia logs diretamente para loki:3100/loki/api/v1/push.
+# =====================================================================
 deploymentMode: SingleBinary
 
 loki:
@@ -37,8 +46,8 @@ loki:
           prefix: index_
           period: 24h
 
-  # Habilita ingestao via OTLP (OpenTelemetry Protocol)
-  # [DESABILITADO] Logs vao pelo Promtail (HTTP push)
+  # Ingestao via OTLP desabilitada
+  # Logs sao coletados pelo Promtail via HTTP push, nao via OTel SDK
   otlp_config:
     logs:
       enabled: false
@@ -78,3 +87,4 @@ resultsCache:
   enabled: false
 chunksCache:
   enabled: false
+

@@ -1,6 +1,10 @@
 # =====================================================================
-# Instrumentation - Auto-instrumentacao Python
+# Instrumentation - Auto-instrumentacao Python (documentacao de referencia)
 # =====================================================================
+# ATENCAO: Este arquivo e apenas uma referencia/backup.
+# O recurso Instrumentation e criado automaticamente no main.tf via
+# null_resource + local-exec (kubectl apply) apos o Helm do Operator.
+#
 # Recurso gerenciado pelo OTEL Operator (CRD: opentelemetry.io/v1alpha1).
 #
 # O que faz: Configura o Operator para injetar automaticamente o agente
@@ -43,3 +47,4 @@ spec:
   sampler:
     type: parentbased_traceidratio
     argument: "1"
+

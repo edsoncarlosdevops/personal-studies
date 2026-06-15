@@ -1,33 +1,23 @@
 # Promtail - Coleta de logs do Kubernetes para o Loki
 # =============================================================================
-# [CORRIGIDO] Problema #1 RESOLVIDO:
-# Antes usava config.lokiAddress (que nao era mapeado pelo chart),
-# agora usa clients[0].url diretamente.
+# O Promtail e um agente que roda como DaemonSet em cada node do EKS.
+# Ele le os logs do arquivo /var/log/pods/*.log no node e envia para o Loki.
 #
-# PROBLEMAS AINDA PENDENTES DE VERIFICACAO:
+# Fluxo:
+#   Pod (stdout/stderr) -> containerd -> /var/log/pods/ -> Promtail -> Loki
 #
-# 1. PERMISSOES RBAC
-#    Promtail pode estar sem permissao pra ler /var/log/pods.
-#    O chart cria ServiceAccount e ClusterRole, mas verificar se o
-#    ClusterRole tem permissao pra listar pods (kubernetes_sd_configs).
+# Labels injetadas por padrao:
+#   namespace, pod, container, app, job, node_name
 #
-# 2. VOLUME /var/log/pods
-#    Confirmar se o volume hostPath /var/log/pods esta montado.
-#    kubectl exec -n monitoring promtail-XXXX -- ls /var/log/pods/
-#    Se vazio, o volume nao esta montado.
+# [ATENCAO] RUNTIME CONTAINERD (EKS):
+# No EKS o runtime e containerd, nao Docker. Os logs estao em /var/log/pods/.
+# O chart do Promtail v6.x monta /var/lib/docker/containers por padrao,
+# entao precisamos sobrescrever os volumes para o path correto.
 #
-# 3. DASHBOARD GRAFANA DESATUALIZADO
-#    O dashboard atual tem UID 4999d044-a288-4297-8f72-c726b1e58b5a
-#    e usa queries antigas. Criar um novo dashboard com:
-#    - Loki queries: {namespace=~"otel-test|monitoring"}
-#    - Prometheus: kube_pod_container_resource_requests
-#    - Tempo: queryType = search (padrao, sem filtro)
-#
-# Fluxo esperado:
-#   Pod (stdout) -> /var/log/pods/ -> Promtail -> Loki (:3100)
-#
-# Labels que devem aparecer no Loki:
-#   namespace, pod, container
+# [ATENCAO] LOKI SINGLEBINARY (sem gateway):
+# O chart do Promtail v6.x usa loki-gateway como default para clients[0].url.
+# Como usamos Loki em modo SingleBinary (sem gateway), precisamos apontar
+# diretamente para http://loki:3100/loki/api/v1/push.
 # =============================================================================
 
 # ═══════════════════════════════════════════════════════

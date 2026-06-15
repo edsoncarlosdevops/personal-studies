@@ -2,6 +2,14 @@
 # =====================================================================
 # OpenCost calcula o custo de cada workload no cluster baseado
 # no consumo de CPU, memoria, storage e trafego de rede.
+#
+# Ele consulta o Prometheus para obter metricas de utilizacao
+# de recursos e os precos da AWS para calcular os custos.
+#
+# Fluxo:
+#   OpenCost -> Prometheus (:80) -> metricas de pods/nodes
+#   OpenCost -> UI / API (:9003) -> visualizacao no Grafana
+# =====================================================================
 
 opencost:
   exporter:
@@ -17,3 +25,4 @@ opencost:
   metrics:
     # A cada 30s o OpenCost coleta dados de utilizacao do Prometheus
     scrapeInterval: 30s
+

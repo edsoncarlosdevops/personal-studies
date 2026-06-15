@@ -2,6 +2,11 @@
 # =====================================================================
 # O Alertmanager gerencia alertas enviados pelo Prometheus.
 # Ele faz deduplicacao, grouping, silenciamento e roteamento.
+#
+# Nota: Em ambientes dev/lab, o Alertmanager e util para testar
+# regras de alerta, mas pode ser desabilitado se desnecessario.
+# =====================================================================
+
 replicaCount: 1
 
 resources:
@@ -13,4 +18,5 @@ resources:
     memory: 32Mi
 
 persistence:
-  enabled: false # Para lab local, persistencia no alertmanager raramente e critica
+  enabled: false
+
