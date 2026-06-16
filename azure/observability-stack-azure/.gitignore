@@ -1,21 +1,22 @@
 # ── Terraform ──
-.terraform/
-*.tfstate
-*.tfstate.backup
-*.tfstate.*.backup
-*.tfplan
-*.terraform.lock.hcl
-*.lock.info
+**/.terraform/
+**/terraform.tfstate
+**/terraform.tfstate.backup
+**/terraform.tfstate.*.backup
+**/*.tfplan
+**/*.terraform.lock.hcl
+**/*.lock.info
 
 # ── Terragrunt ──
-terragrunt.*.tmp
+**/.terragrunt-cache/
+**/terragrunt.*.tmp
+
+# ── Kubeconfig ──
+**/kubeconfig_*
 
 # ── Node ──
 **/node_modules/
 **/package-lock.json
-
-# ── K8s ──
-**/kubeconfig_*
 
 # ── IDE ──
 .vscode/
@@ -31,3 +32,6 @@ Thumbs.db
 *.key
 *.pem
 *.env
+
+# ── Local generated files ──
+**/bastion-key.pem
