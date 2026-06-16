@@ -1,34 +1,33 @@
-# Terraform
+# ── Terraform ──
 .terraform/
 *.tfstate
 *.tfstate.backup
+*.tfstate.*.backup
 *.tfplan
 *.terraform.lock.hcl
+*.lock.info
 
-# Terragrunt
+# ── Terragrunt ──
 terragrunt.*.tmp
 
-# Node
+# ── Node ──
 **/node_modules/
 **/package-lock.json
 
-# K8s
+# ── K8s ──
 **/kubeconfig_*
 
-# IDE
+# ── IDE ──
 .vscode/
 .idea/
 *.swp
 *.swo
 
-# OS
+# ── OS ──
 .DS_Store
 Thumbs.db
 
-# Secrets
+# ── Secrets ──
 *.key
 *.pem
 *.env
-
-# Terraform lock files
-*.lock.info

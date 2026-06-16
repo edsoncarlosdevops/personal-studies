@@ -33,10 +33,7 @@ AKS Cluster (namespace: monitoring)
 ## Prerequisites
 
 ```bash
-# Tools
 brew install terraform terragrunt kubectl azure-cli
-
-# Azure login
 az login --tenant e350a4aa-300d-4d3d-8723-9e5554b17f3a
 az account set --subscription "Azure subscription 1"
 ```
@@ -45,35 +42,25 @@ az account set --subscription "Azure subscription 1"
 
 ## Deploy
 
-### Step 1: Bootstrap (one time only)
+### 1. Bootstrap (one time only)
 
-Creates the remote state backend: Resource Group + Storage Account + Blob Container.
+Creates remote state backend: Resource Group + Storage Account + Container.
 
 ```bash
-cd modules/bootstrap
+cd bootstrap
 terraform init
 terraform apply -auto-approve
 ```
 
-No input needed. The storage account name is auto-generated with a random suffix.
-
-### Step 2: Deploy the stack
+### 2. Deploy the stack
 
 ```bash
 cd deploy/environments/dev
-terragrunt run-all plan    # Preview
-terragrunt run-all apply   # Create everything
+terragrunt run run-all plan    # Preview
+terragrunt run run-all apply   # Create everything
 ```
 
-This creates in order:
-
-| Order | Component | What it does |
-|-------|-----------|-------------|
-| 1 | **AKS + VNet** | Resource Group, VNet, subnets, NSG, AKS cluster |
-| 2 | **PostgreSQL** | Azure Database for PostgreSQL Flexible Server |
-| 3 | **Monitoring** | 12 components (Prometheus, Grafana, Loki, etc.) |
-
-### Step 3: Access the cluster
+### 3. Access the cluster
 
 ```bash
 az aks get-credentials --resource-group rg-observability --name aks-observability
@@ -87,31 +74,35 @@ kubectl get pods -n monitoring
 
 ```bash
 cd deploy/environments/dev
-terragrunt run-all destroy
+terragrunt run run-all destroy
 ```
-
-> No protection locks — `prevent_deletion_if_contains_resources = false` is configured.
 
 ---
 
 ## Project Structure
 
 ```
+├── bootstrap/               # Remote state setup (RG + Storage + Container)
 ├── modules/
-│   ├── bootstrap/       → Remote state backend (RG + Storage + Container)
-│   ├── aks/             → AKS + VNet + subnets + NSG
-│   └── postgresql/      → Azure PostgreSQL Flexible Server
+│   ├── aks/                 # AKS + VNet + subnets + NSG
+│   └── postgresql/          # Azure PostgreSQL Flexible Server
 ├── deploy/
-│   ├── terragrunt.hcl   → Global config (providers, remote state)
+│   ├── terragrunt.hcl       # Global config (providers, remote state)
 │   └── environments/dev/
-│       ├── aks/         → AKS terragrunt
-│       ├── postgresql/  → PostgreSQL terragrunt
-│       ├── locals.tf    → Shared variables
-│       └── monitoring/  → 12 monitoring components
-├── app-node/            → Sample Node.js app (Express + OTel annotation)
-├── alerts/              → Prometheus rules + Alertmanager config
-├── dashboards/          → Grafana dashboards (JSON)
-└── scripts/             → Utility scripts
+│       ├── aks/             # AKS deployment
+│       ├── postgresql/      # PostgreSQL deployment
+│       ├── locals.tf        # Shared variables
+│       └── monitoring/      # 12 monitoring components
+├── alerts/
+│   ├── prometheus-rules.yaml             # Pod, node, app alerts
+│   ├── prometheus-rules-postgresql.yaml  # PostgreSQL alerts
+│   └── config/alertmanager.yaml          # Email + Telegram
+├── dashboards/
+│   └── postgresql-overview.json          # Grafana dashboard
+├── app-node/                # Sample Node.js app
+├── scripts/
+│   └── generate-docs.sh     # Auto-doc generation
+└── README.md
 ```
 
 ## Alerts
@@ -133,7 +124,7 @@ terragrunt run-all destroy
 
 ## Notifications
 
-Alerts are routed via **Alertmanager**:
+Alerts routed via **Alertmanager**:
 - **Critical**: Email + Telegram
 - **Warning**: Email only
 - **Resolved**: Notified with status
