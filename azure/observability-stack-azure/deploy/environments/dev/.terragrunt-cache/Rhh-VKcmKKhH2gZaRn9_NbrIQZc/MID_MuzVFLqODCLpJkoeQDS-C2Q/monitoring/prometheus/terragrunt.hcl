@@ -2,12 +2,8 @@ terraform {
   source = "../../../../../monitoring/modules/monitoring/prometheus"
 }
 
-include "root" {
+include {
   path = find_in_parent_folders()
-}
-
-include "monitoring" {
-  path = "${get_terragrunt_dir()}/../terragrunt.hcl"
 }
 
 dependencies {

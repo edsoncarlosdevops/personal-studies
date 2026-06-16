@@ -1,5 +1,5 @@
 terraform {
-  source = "/Users/edsoncarlos/Downloads/personal-studies/azure/observability-stack-azure/modules/aks"
+  source = "../../../modules/aks"
 }
 
 include {
@@ -15,6 +15,7 @@ inputs = {
   node_size           = "Standard_B2s"
   os_disk_size_gb     = 60
 
+  # Networking
   vnet_name            = "vnet-observability"
   vnet_address_space   = ["10.0.0.0/16"]
   aks_subnet_name      = "snet-aks"
@@ -24,6 +25,7 @@ inputs = {
   pe_subnet_name             = "snet-private-endpoints"
   pe_subnet_prefixes         = ["10.0.3.0/24"]
 
+  # Security: allow your IP to reach API server
   allowed_api_source_ips = []
 
   tags = {
