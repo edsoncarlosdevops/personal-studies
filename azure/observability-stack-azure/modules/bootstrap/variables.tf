@@ -10,9 +10,10 @@ variable "location" {
   default     = "eastus2"
 }
 
-variable "storage_account_name" {
-  description = "Storage Account name (globally unique, 3-24 chars, lowercase letters + numbers)"
+variable "storage_account_prefix" {
+  description = "Prefix for storage account name (will append random suffix)"
   type        = string
+  default     = "tfstate"
 }
 
 variable "container_name" {

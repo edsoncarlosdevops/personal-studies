@@ -8,6 +8,10 @@ terraform {
       source  = "hashicorp/azurerm"
       version = "~> 4.0"
     }
+    random = {
+      source  = "hashicorp/random"
+      version = "~> 3.0"
+    }
   }
 }
 
@@ -17,6 +21,16 @@ provider "azurerm" {
       prevent_deletion_if_contains_resources = false
     }
   }
+}
+
+locals {
+  storage_account_name = "${var.storage_account_prefix}${random_string.suffix.result}"
+}
+
+resource "random_string" "suffix" {
+  length  = 8
+  special = false
+  upper   = false
 }
 
 resource "azurerm_resource_group" "state" {
@@ -29,7 +43,7 @@ resource "azurerm_resource_group" "state" {
 }
 
 resource "azurerm_storage_account" "state" {
-  name                     = var.storage_account_name
+  name                     = local.storage_account_name
   resource_group_name      = azurerm_resource_group.state.name
   location                 = azurerm_resource_group.state.location
   account_tier             = "Standard"

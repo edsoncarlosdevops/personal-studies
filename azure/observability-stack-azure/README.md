@@ -1,10 +1,10 @@
 # Observability Stack on Azure (AKS)
 
-Full observability stack deployed on **Azure Kubernetes Service** using **Terraform**, **Terragrunt**, and **GitHub Actions**.
+Full observability stack deployed on **Azure Kubernetes Service** using **Terraform**, **Terragrunt**, and **OpenTelemetry**.
 
 ---
 
-## Architecture Overview
+## Architecture
 
 ```
 Azure (eastus2)
@@ -17,26 +17,15 @@ Azure (eastus2)
     └── PostgreSQL Flexible Server
 
 AKS Cluster (namespace: monitoring)
-├── cert-manager            → TLS
-├── Prometheus + Alertmanager → Metrics & alerts
-├── Grafana                → Dashboards
-├── Loki + Promtail        → Logs
-├── Tempo                  → Traces
-├── OpenTelemetry Operator → Auto-instrumentation
-├── OpenTelemetry Collector → Pipeline (metrics→Prometheus, traces→Tempo, logs→Loki)
-├── OpenCost               → Cost monitoring
-└── postgres-exporter      → PostgreSQL metrics
-```
-
----
-
-## Deploy Order
-
-```
-Step 1: AKS + VNet      (terragrunt apply)
-Step 2: PostgreSQL       (terragrunt apply)
-Step 3: Monitoring Stack (terragrunt run-all apply)
-Step 4: App              (kubectl apply or GitHub Actions)
+├── cert-manager               → TLS
+├── Prometheus + Alertmanager  → Metrics & alerts
+├── Grafana                    → Dashboards
+├── Loki + Promtail            → Logs
+├── Tempo                      → Traces
+├── OpenTelemetry Operator     → Auto-instrumentation
+├── OpenTelemetry Collector    → Pipeline (metrics, traces, logs)
+├── OpenCost                   → Cost monitoring
+└── postgres-exporter          → PostgreSQL metrics
 ```
 
 ---
@@ -45,87 +34,85 @@ Step 4: App              (kubectl apply or GitHub Actions)
 
 ```bash
 # Tools
-terraform >= 1.5
-terragrunt >= 0.72
-az cli
+brew install terraform terragrunt kubectl azure-cli
 
 # Azure login
-az login
-az account set --subscription "your-subscription"
+az login --tenant e350a4aa-300d-4d3d-8723-9e5554b17f3a
+az account set --subscription "Azure subscription 1"
 ```
 
 ---
 
 ## Deploy
 
+### Step 1: Bootstrap (one time only)
+
+Creates the remote state backend: Resource Group + Storage Account + Blob Container.
+
 ```bash
-# 1. AKS (infra + networking)
-cd deploy/environments/dev/aks
-terragrunt apply
-cd ../..
-
-# 2. PostgreSQL
-cd postgresql
-terragrunt apply
-cd ..
-
-# 3. Monitoring stack (respects dependencies automatically)
-cd monitoring
-terragrunt run-all apply
-cd ../..
-
-# 4. Deploy sample app
-kubectl apply -f app-node/k8s/deployment.yaml
+cd modules/bootstrap
+terraform init
+terraform apply -auto-approve
 ```
+
+No input needed. The storage account name is auto-generated with a random suffix.
+
+### Step 2: Deploy the stack
+
+```bash
+cd deploy/environments/dev
+terragrunt run-all plan    # Preview
+terragrunt run-all apply   # Create everything
+```
+
+This creates in order:
+
+| Order | Component | What it does |
+|-------|-----------|-------------|
+| 1 | **AKS + VNet** | Resource Group, VNet, subnets, NSG, AKS cluster |
+| 2 | **PostgreSQL** | Azure Database for PostgreSQL Flexible Server |
+| 3 | **Monitoring** | 12 components (Prometheus, Grafana, Loki, etc.) |
+
+### Step 3: Access the cluster
+
+```bash
+az aks get-credentials --resource-group rg-observability --name aks-observability
+kubectl get nodes
+kubectl get pods -n monitoring
+```
+
+---
+
+## Destroy
+
+```bash
+cd deploy/environments/dev
+terragrunt run-all destroy
+```
+
+> No protection locks — `prevent_deletion_if_contains_resources = false` is configured.
 
 ---
 
 ## Project Structure
 
 ```
-observability-stack-azure/
-├── .github/workflows/
-│   ├── deploy-monitoring.yml    # CI/CD with SAST + Plan + Apply
-│   └── app-node-ci.yml          # App CI (lint + SAST + tests)
-├── alerts/
-│   ├── config/alertmanager.yaml          # Email + Telegram
-│   ├── prometheus-rules.yaml             # Pods, resources, app
-│   └── prometheus-rules-postgresql.yaml  # PostgreSQL alerts
-├── app-node/                   # Sample Node.js app
-│   ├── src/server.js           # Express (3 endpoints)
-│   ├── Dockerfile
-│   └── k8s/deployment.yaml     # With OTel annotation
-├── dashboards/
-│   └── postgresql-overview.json  # Grafana dashboard
-├── deploy/
-│   ├── terragrunt.hcl          # Global provider config
-│   └── environments/dev/
-│       ├── aks/                # AKS + VNet
-│       ├── postgresql/         # Azure PostgreSQL
-│       ├── locals.tf           # Shared variables
-│       └── monitoring/         # 10 components
 ├── modules/
-│   ├── aks/                    # AKS module (real)
-│   ├── postgresql/             # PostgreSQL module (real)
-│   └── monitoring/             # Wrappers → monitoring/modules/monitoring/
-└── monitoring/                 # Real modules (separate repo)
+│   ├── bootstrap/       → Remote state backend (RG + Storage + Container)
+│   ├── aks/             → AKS + VNet + subnets + NSG
+│   └── postgresql/      → Azure PostgreSQL Flexible Server
+├── deploy/
+│   ├── terragrunt.hcl   → Global config (providers, remote state)
+│   └── environments/dev/
+│       ├── aks/         → AKS terragrunt
+│       ├── postgresql/  → PostgreSQL terragrunt
+│       ├── locals.tf    → Shared variables
+│       └── monitoring/  → 12 monitoring components
+├── app-node/            → Sample Node.js app (Express + OTel annotation)
+├── alerts/              → Prometheus rules + Alertmanager config
+├── dashboards/          → Grafana dashboards (JSON)
+└── scripts/             → Utility scripts
 ```
-
----
-
-## Monitoring Pipelines
-
-```
-OpenTelemetry Collector:
-  Metrics → Prometheus (port 8889, prefix "otel_")
-  Traces  → Tempo (http://tempo.monitoring.svc:4317)
-  Logs    → Loki (http://loki.monitoring.svc:3100)
-
-postgres-exporter:
-  Metrics → Prometheus (scraped via ServiceMonitor)
-```
-
----
 
 ## Alerts
 
@@ -134,41 +121,19 @@ postgres-exporter:
 | PodCrashLoopBackOff | critical | Pod in crash loop |
 | PodRestartHigh | warning | >3 restarts in 30min |
 | PodNotReady | critical | Pod not ready for 5min |
-| HighCPUUsage | warning | CPU >80% for 10min |
-| HighMemoryUsage | warning | Memory >80% for 10min |
+| NodeDiskSpace | critical | Node disk <20% |
+| NodeNotReady | critical | Node not ready |
 | HighRequestLatency | warning | P95 latency >500ms |
-| HighErrorRate | critical | Error rate >5% |
+| HighErrorRate | critical | HTTP 5xx >5% |
+| PrometheusTargetDown | critical | Scrape target unreachable |
 | PostgreSQLDown | critical | Server unreachable |
 | PostgreSQLHighConnections | warning | >80 active connections |
 | PostgreSQLDeadlocks | critical | Deadlocks detected |
 | PostgreSQLCacheHitRatio | warning | Cache hit <90% |
 
----
+## Notifications
 
-## CI/CD (GitHub Actions)
-
-```yaml
-On PR: SAST (TruffleHog + Checkov + TFSec) + Terragrunt Plan
-On manual dispatch "apply": Approval gate → Terragrunt Apply
-```
-
----
-
-## Quick Commands
-
-```bash
-# Validate everything
-terragrunt run-all validate
-
-# Plan all
-terragrunt run-all plan
-
-# Plan a single component
-terragrunt plan --terragrunt-working-dir deploy/environments/dev/aks
-
-# Apply all
-terragrunt run-all apply
-
-# Destroy all
-terragrunt run-all destroy
-```
+Alerts are routed via **Alertmanager**:
+- **Critical**: Email + Telegram
+- **Warning**: Email only
+- **Resolved**: Notified with status
