@@ -29,3 +29,6 @@ Thumbs.db
 *.key
 *.pem
 *.env
+
+# Terraform lock files
+*.lock.info
