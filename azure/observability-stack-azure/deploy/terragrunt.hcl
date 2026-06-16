@@ -63,7 +63,7 @@ remote_state {
   backend = "azurerm"
   config = {
     resource_group_name  = "terraform-states"
-    storage_account_name = "tfstate${replace(get_env("AZURE_SUFFIX", "dev"), "-", "")}"
+    storage_account_name = "tfstateobservability"
     container_name       = "terraform-state"
     key                  = "${path_relative_to_include()}/terraform.tfstate"
   }
