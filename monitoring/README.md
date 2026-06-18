@@ -229,12 +229,83 @@ spec:
 
 ## SLOs (Service Level Objectives)
 
-Regras de alerta definidas em `dashboards/slo-rules.yml`:
+### Conceitos: SLI vs SLO vs SLA
 
-| SLO | Métrica | Meta | Severidade | Janela |
-|-----|---------|------|------------|--------|
-| Disponibilidade | `avg(up)` | > 95% | Critical | 2 min |
-| Confiabilidade | CrashLoopBackOff | Zero pods | Warning | 1 min |
+```
+SLI (Service Level Indicator)  →  O que medimos (a métrica)
+SLO (Service Level Objective)  →  A meta que definimos
+SLA (Service Level Agreement)  →  O contrato com o cliente
+```
+
+**Exemplo prático (testado no cluster):**
+
+| Conceito | Nosso exemplo |
+|----------|---------------|
+| **SLI** | `avg(up{namespace="monitoring"})` = % de pods rodando |
+| **SLO** | Disponibilidade > 95% (se cair, alerta dispara) |
+| **SLA** | Notificar time via Slack/Email/PagerDuty |
+
+### Como testamos na prática
+
+```bash
+# 1. Derrubamos um serviço propositalmente
+kubectl scale deployment -n monitoring app-python-auto --replicas=0
+
+# 2. O SLI caiu (métrica de disponibilidade)
+#    Antes: 21/24 pods RUNNING (100%)
+#    Depois: 20/24 pods RUNNING (83.3%)
+
+# 3. O SLO foi violado (meta era > 95%)
+#    Alerta disparou no Grafana Alerting
+
+# 4. Recuperamos o serviço
+kubectl scale deployment -n monitoring app-python-auto --replicas=1
+```
+
+### SLOs configurados
+
+Regras de alerta definidas em `modules/monitoring/prometheus/config/values.yaml` (grupo `slo`):
+
+| SLO | SLI (métrica) | Meta | Severidade | Janela |
+|-----|--------------|------|------------|--------|
+| 📊 Disponibilidade | `avg(up{namespace="monitoring"})` | > 95% | 🔴 Critical | 2 min |
+| 🔄 Confiabilidade | Pods em CrashLoopBackOff | Zero pods | 🟡 Warning | 1 min |
+| 💾 Memória | working_set_bytes / request | < 85% | 🟡 Warning | 5 min |
+| ⚡ CPU | usage / request | < 85% | 🟡 Warning | 5 min |
+
+### Onde visualizar
+
+- **Alertas SLO ativos:** `http://localhost:8080/alerting/list` (grupo "SLO")
+- **Dashboard:** `http://localhost:8080/d/295f6601/stack-de-observabilidade`
+- **Notificações:** Alertmanager envia email para `edsoncarlos.ec40@gmail.com`
+
+### Ferramentas de SLO usadas no mercado
+
+| Ferramenta | Tipo | Uso |
+|------------|------|-----|
+| **Grafana Alerting** | Open Source | Alertas SLO (como configuramos aqui) |
+| **Grafana SLO App** | Plugin | Dashboard dedicado de SLO |
+| **Nob9** | SaaS | SLO como serviço gerenciado |
+| **Datadog SLO** | SaaS | SLO nativo Datadog |
+| **Google SRE** | Metodologia | Conceito SLI/SLO/SLA (SRE Book) |
+
+### SLA (Service Level Agreement) - Exemplo de contrato
+
+```
+SERVICO: Plataforma de Pagamentos
+┌─────────────────────────────────────────────────────┐
+│  SLI           │  SLO          │  SLA               │
+├─────────────────────────────────────────────────────┤
+│  Latencia P95  │  < 500ms      │  Credito de 5%     │
+│                │  em 99% do mes│  por violacao      │
+├─────────────────────────────────────────────────────┤
+│  Taxa de erro  │  < 1% (5xx)   │  Notificar em      │
+│                │               │  < 15 min          │
+├─────────────────────────────────────────────────────┤
+│  Uptime        │  > 99.9%      │  Chamar squad em   │
+│                │               │  < 5 min           │
+└─────────────────────────────────────────────────────┘
+```
 | Memória | working_set_bytes / request | < 85% | Warning | 5 min |
 | CPU | usage / request | < 85% | Warning | 5 min |
 
