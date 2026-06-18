@@ -19,23 +19,19 @@ steps:
   displayName: 'Build info'
 
 - bash: |
-    # Install tools
-    wget -q https://releases.hashicorp.com/terraform/1.10.0/terraform_1.10.0_linux_amd64.zip
+    # Install Terraform (linux amd64)
+    wget -q https://releases.hashicorp.com/terraform/1.10.0/terraform_1.10.0_linux_amd64.zip -O terraform.zip
     unzip -q terraform.zip
     sudo mv terraform /usr/local/bin/
+    rm terraform.zip
     
-    wget -q https://github.com/gruntwork-io/terragrunt/releases/download/v0.71.0/terragrunt_linux_arm64 -O terragrunt
-    chmod +x terragrunt
-    sudo mv terragrunt /usr/local/bin/
-    
-    echo "Tools installed:"
+    echo "Terraform installed:"
     terraform --version
-    terragrunt --version
-  displayName: 'Install Terraform + Terragrunt'
+  displayName: 'Install Terraform'
 
 - bash: |
     echo "Validating Terraform modules..."
-    
+
     for dir in \
       azure/observability-stack-azure/modules/aks \
       azure/observability-stack-azure/deploy/environments/dev/tf \
@@ -44,8 +40,20 @@ steps:
       echo "--- Checking $dir ---"
       cd "$(Build.SourcesDirectory)/$dir"
       terraform init -backend=false 2>/dev/null
-      terraform fmt -check -recursive && echo "  Format: OK" || echo "  Format: NEEDS FIX"
-      terraform validate && echo "  Validate: OK" || echo "  Validate: FAILED"
+      
+      terraform fmt -check -recursive
+      if [ $? -eq 0 ]; then
+        echo "  Format: OK"
+      else
+        echo "  Format: NEEDS FIX (run 'terraform fmt')"
+      fi
+      
+      terraform validate
+      if [ $? -eq 0 ]; then
+        echo "  Validate: OK"
+      else
+        echo "  Validate: FAILED"
+      fi
       echo ""
     done
   displayName: 'Validate all Terraform modules'
@@ -53,9 +61,5 @@ steps:
 - bash: |
     echo "Project structure:"
     echo ""
-    echo "azure/observability-stack-azure/"
-    ls -la azure/observability-stack-azure/
-    echo ""
-    echo "Monitoring components:"
-    ls -d azure/observability-stack-azure/deploy/environments/dev/monitoring/*/
+    tree azure/observability-stack-azure/ --dirsfirst -I '.terraform*|.terragrunt*|*.tfstate*'
   displayName: 'Show project structure'
