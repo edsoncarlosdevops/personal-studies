@@ -4,7 +4,7 @@
 #
 # Targets de scrape configurados:
 # 1. prometheus (localhost:9090) - metricas do proprio servico
-# 2. opentelemetry-collector (:8889) - metricas da aplicacao via SDK OTel
+# 
 # 3. kubernetes-nodes (node-exporter :9100) - metricas de CPU/memoria dos EC2
 # 4. kube-state-metrics (:8080) - metricas de objetos Kubernetes (pods, deployments)
 # =====================================================================
@@ -58,15 +58,6 @@ serverFiles:
           - targets:
             - localhost:9090
 
-      # --- TARGET 2: OTEL Collector (metricas da app via exporter prometheus) ---
-      - job_name: opentelemetry-collector
-        scrape_interval: 15s
-        static_configs:
-          - targets:
-            - opentelemetry-collector.monitoring.svc.cluster.local:8889
-
-      # --- TARGET 3: Nodes via node-exporter ---
-      # 3 nodes EC2 t3.medium, cada um com node-exporter na porta 9100
       - job_name: kubernetes-nodes
         scrape_interval: 15s
         scheme: http
