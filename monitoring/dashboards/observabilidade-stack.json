@@ -121,58 +121,6 @@
         ]
       },
       {
-        "id": 6,
-        "title": "Traces - api-pedidos",
-        "type": "table",
-        "datasource": {
-          "type": "tempo",
-          "uid": "P214B5B846CF3925F"
-        },
-        "gridPos": {
-          "h": 8,
-          "w": 12,
-          "x": 0,
-          "y": 16
-        },
-        "targets": [
-          {
-            "query": "{\"rootServiceName\"=\"api-pedidos\"}",
-            "limit": 20
-          }
-        ],
-        "fieldConfig": {
-          "defaults": {
-            "custom": {
-              "align": "left"
-            }
-          },
-          "overrides": [
-            {
-              "matcher": {
-                "id": "byName",
-                "options": "traceID"
-              },
-              "properties": [
-                {
-                  "id": "links",
-                  "value": [
-                    {
-                      "title": "Ver detalhes",
-                      "url": "",
-                      "internal": {
-                        "queryType": "traceId",
-                        "datasourceUid": "P214B5B846CF3925F",
-                        "datasourceName": "Tempo"
-                      }
-                    }
-                  ]
-                }
-              ]
-            }
-          ]
-        }
-      },
-      {
         "id": 7,
         "title": "Logs (Loki)",
         "type": "logs",
