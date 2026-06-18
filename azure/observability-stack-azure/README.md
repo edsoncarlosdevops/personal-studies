@@ -168,6 +168,120 @@ The `eastus2` region does not support PostgreSQL Flexible Server in this Azure s
 
 ---
 
+## DevOps Pipeline
+
+An Azure DevOps pipeline validates the infrastructure and connects to the AKS cluster.
+
+**azure-pipelines.yml workflow:**
+
+```yaml
+trigger -> ubuntu-latest agent
+  -> Azure CLI: Check AKS cluster status
+  -> Azure CLI: Get kubeconfig admin -> kubectl get nodes/pods
+  -> Azure CLI: Helm list releases in monitoring
+```
+
+**Authentication:** Service Principal with contributor role on the subscription. Credentials stored in Azure DevOps Library (secure variable group).
+
+**Service connection:** `azure-pipeline-observability-key` (Secret key auth).
+
+---
+
+## Cost Optimization (FinOps)
+
+Current Azure spend: ~$1,000/month (pre-production). Strategies to reduce:
+
+| Strategy | Impact | Implementation |
+|----------|--------|---------------|
+| Spot VMs for non-production | 60-80% savings | Node pool with `ScaleSetPriority: Spot` |
+| Auto-shutdown QA/demo | 50% savings | Azure Automation shutdown schedule |
+| Azure Reservations | 30-40% savings | 1-year reservation for predictable workloads |
+| Budget alerts | Prevent surprises | Azure Budget + Action Group email |
+| Idle resource detection | Variable | Monitoring stack identifies underutilized resources |
+
+---
+
+## Mobile Application Monitoring
+
+### Architecture
+
+The pipeline supports both backend (AKS) and mobile (iOS/Android) deployments:
+
+```
+Developer commit
+     |
+     v
+Azure Pipeline
+     |
+  +--+--+
+  |     |
+  v     v
+Build  Test
+  |
+  +--+--+--+
+  |     |     |
+  v     v     v
+ iOS  Android  Backend API
+(IPA)  (APK)   (AKS deploy)
+  |     |     |
+  v     v     v
+App Store  Google Play  Container
+  |     |     |
+  v     v     v
+User downloads   API running
+  |              |
+  v              v
+Sentry        Prometheus
+(crashes)     (metrics)
+  |              |
+  +------+------+
+         |
+         v
+      Grafana
+    (dashboard)
+```
+
+### Backend monitoring (this stack)
+
+| Tool | Purpose |
+|------|---------|
+| Prometheus | Metrics collection from AKS pods/services |
+| Grafana | Dashboards for CPU, memory, request latency |
+| Loki + Promtail | Centralized log aggregation |
+| Tempo | Distributed tracing for API requests |
+| Alertmanager | Alert routing to Slack/Email/Telegram |
+
+### Mobile monitoring (Sentry)
+
+| Feature | How it works |
+|---------|-------------|
+| Crash reporting | SDK in iOS/Android captures crashes automatically |
+| Performance | Traces slow API calls, UI freezes, ANR |
+| Release tracking | Pipeline uploads dSYM/ProGuard symbols |
+| Alerts | Notify Slack when crash rate exceeds threshold |
+
+### Fastlane integration
+
+```ruby
+# Fastfile
+lane :deploy do
+  ios_build(scheme: 'Compile')
+  upload_to_app_store
+  
+  android_build
+  upload_to_play_store
+end
+```
+
+Pipeline steps for mobile:
+1. Install Fastlane + Sentry CLI
+2. Run unit/UI tests
+3. Build signed IPA (iOS) and APK (Android)
+4. Upload symbols to Sentry
+5. Deploy to App Store Connect / Google Play Console
+
+---
+
 ## Project Structure
 
 ```
