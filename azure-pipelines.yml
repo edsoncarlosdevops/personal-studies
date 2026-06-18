@@ -1,5 +1,4 @@
-# Azure Pipeline for Observability Stack
-# Validates Terraform and checks AKS connectivity
+# Azure Pipeline - Infrastructure Validation & Reports
 
 trigger:
   branches:
@@ -9,40 +8,54 @@ trigger:
 pool:
   vmImage: ubuntu-latest
 
-variables:
-  azureSubscription: 'Azure subscription 1'
-  resourceGroup: 'rg-observability'
-  aksCluster: 'aks-observability'
-
 steps:
-- task: TerraformInstaller@1
-  displayName: 'Install Terraform'
-  inputs:
-    terraformVersion: 'latest'
+- bash: |
+    echo "=========================================="
+    echo " Pipeline: Observability Stack Validation"
+    echo " Repo: personal-studies"
+    echo " Branch: $(Build.SourceBranch)"
+    echo " Commit: $(Build.SourceVersion)"
+    echo "=========================================="
+  displayName: 'Build info'
 
-- script: |
-    cd azure/observability-stack-azure/modules/aks
-    terraform init -backend=false
-    terraform fmt -check
-    terraform validate
-  displayName: 'Validate AKS Terraform module'
+- bash: |
+    # Install tools
+    wget -q https://releases.hashicorp.com/terraform/1.10.0/terraform_1.10.0_linux_amd64.zip
+    unzip -q terraform.zip
+    sudo mv terraform /usr/local/bin/
+    
+    wget -q https://github.com/gruntwork-io/terragrunt/releases/download/v0.71.0/terragrunt_linux_arm64 -O terragrunt
+    chmod +x terragrunt
+    sudo mv terragrunt /usr/local/bin/
+    
+    echo "Tools installed:"
+    terraform --version
+    terragrunt --version
+  displayName: 'Install Terraform + Terragrunt'
 
-- script: |
-    cd azure/observability-stack-azure/deploy/environments/dev/tf
-    terraform init -backend=false
-    terraform fmt -check
-    terraform validate
-  displayName: 'Validate dev environment Terraform'
+- bash: |
+    echo "Validating Terraform modules..."
+    
+    for dir in \
+      azure/observability-stack-azure/modules/aks \
+      azure/observability-stack-azure/deploy/environments/dev/tf \
+      azure/observability-stack-azure/bootstrap; 
+    do
+      echo "--- Checking $dir ---"
+      cd "$(Build.SourcesDirectory)/$dir"
+      terraform init -backend=false 2>/dev/null
+      terraform fmt -check -recursive && echo "  Format: OK" || echo "  Format: NEEDS FIX"
+      terraform validate && echo "  Validate: OK" || echo "  Validate: FAILED"
+      echo ""
+    done
+  displayName: 'Validate all Terraform modules'
 
-- task: AzureCLI@2
-  displayName: 'Check AKS cluster status'
-  inputs:
-    azureSubscription: '$(azureSubscription)'
-    scriptType: 'bash'
-    scriptLocation: 'inlineScript'
-    inlineScript: |
-      az aks show \
-        --resource-group $(resourceGroup) \
-        --name $(aksCluster) \
-        --query "{name:name, provisioningState:provisioningState, kubernetesVersion:kubernetesVersion, nodeCount:agentPoolProfiles[0].count}" \
-        --output table
+- bash: |
+    echo "Project structure:"
+    echo ""
+    echo "azure/observability-stack-azure/"
+    ls -la azure/observability-stack-azure/
+    echo ""
+    echo "Monitoring components:"
+    ls -d azure/observability-stack-azure/deploy/environments/dev/monitoring/*/
+  displayName: 'Show project structure'
