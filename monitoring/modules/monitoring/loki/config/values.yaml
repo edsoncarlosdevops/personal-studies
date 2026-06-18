@@ -7,7 +7,8 @@
 # Ideal para ambientes dev/lab.
 #
 # Fluxo:
-#   Pod (stdout) -> /var/log/pods/ -> Promtail -> Loki (:3100) -> Grafana
+#   Pod (stdout) -> /var/log/pods/ -> OTel Collector (filelog) -> Loki (:3100) -> Grafana
+#   [ALTERADO] Promtail substituído pelo OTel Collector (filelog + k8sattributes)
 #
 # [ATENCAO] path_prefix:
 # O container do Loki roda como user nao-root (UID 10001).
@@ -46,8 +47,39 @@ loki:
           prefix: index_
           period: 24h
 
-  # Ingestao via OTLP desabilitada
-  # Logs sao coletados pelo Promtail via HTTP push, nao via OTel SDK
+  # ===========================================================================
+  # LIMITS CONFIG - Controle de taxa de ingestão de logs
+  # ===========================================================================
+  #
+  # 📊 SLI (Service Level Indicator):
+  #   ingestion_rate_mb = Quantos MB/s cada tenant pode ingerir
+  #   per_stream_rate_limit = Limite por stream (namespace/pod/container)
+  #
+  # 🎯 SLO (Service Level Objective):
+  #   - 50MB/s é suficiente para ~100 pods com logs intensos
+  #   - Se bater o limite, logs são rejeitados (HTTP 429)
+  #
+  # 📋 SLA (Service Level Agreement):
+  #   - Se o rate limit for atingido, OTel Collector faz retry
+  #   - Se persistir, alerta "SLO - Disponibilidade" dispara
+  #   - Solução: aumentar ingestion_rate_mb ou escalar Loki
+  #
+  # [ATENCAO] Valores padrão do Loki são muito baixos (4MB/s).
+  # Para ambiente dev/lab com OTel Collector, 50MB/s é seguro.
+  # Para produção, monitorar e ajustar conforme necessário.
+  # ===========================================================================
+  limits_config:
+    volume_enabled: true
+    max_cache_freshness_per_query: 10m
+    reject_old_samples: true
+    reject_old_samples_max_age: 168h
+    split_queries_by_interval: 15m
+    ingestion_rate_mb: 50
+    ingestion_burst_size_mb: 100
+    per_stream_rate_limit: 50MB
+    per_stream_rate_limit_burst: 100MB
+
+  # Ingestao via OTLP desabilitada (logs vao via filelog do OTel Collector)
   otlp_config:
     logs:
       enabled: false
