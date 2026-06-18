@@ -1,3 +1,12 @@
+# Prometheus Alert Rules
+# =====================================================================
+# These rules are now deployed inline in the Prometheus Helm chart values:
+#   monitoring/modules/monitoring/prometheus/config/values.yaml
+#
+# This file is kept as a reference copy only.
+# To modify rules, edit the values.yaml file and run terragrunt apply.
+# =====================================================================
+
 groups:
   - name: pods
     interval: 30s

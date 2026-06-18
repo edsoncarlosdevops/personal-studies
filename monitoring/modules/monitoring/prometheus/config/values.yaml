@@ -42,6 +42,15 @@ server:
 # Nao usar alertmanager.rules ou outros blocos aqui, senao o padrao e perdido.
 serverFiles:
   prometheus.yml:
+    # --- Alertmanager integration ---
+    # Routes critical/warning alerts to alertmanager service in monitoring namespace.
+    # The alertmanager handles deduplication, grouping, and email/telegram notifications.
+    alerting:
+      alertmanagers:
+      - static_configs:
+        - targets:
+          - alertmanager:9093
+
     scrape_configs:
       # --- TARGET 1: Proprio Prometheus ---
       - job_name: prometheus
@@ -102,3 +111,83 @@ serverFiles:
             source_labels: [__meta_kubernetes_node_name]
             target_label: node
 
+
+  # --- Alert Rules (8 total) ---
+  # Organized into 3 groups: pods, nodes, application.
+  # Each rule has a severity label for Alertmanager routing.
+  # Rules are evaluated every 30s.
+  alerting_rules.yml: |
+    groups:
+      - name: pods
+        interval: 30s
+        rules:
+          - alert: PodCrashLoopBackOff
+            expr: kube_pod_container_status_waiting_reason{reason="CrashLoopBackOff"} > 0
+            for: 1m
+            labels:
+              severity: critical
+            annotations:
+              summary: "Pod CrashLoopBackOff: {{ $labels.namespace }}/{{ $labels.pod }}"
+              description: "Pod {{ $labels.pod }} in {{ $labels.namespace }} is restarting in a loop."
+          - alert: PodRestartHigh
+            expr: increase(kube_pod_container_status_restarts_total[30m]) > 3
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "High pod restarts: {{ $labels.namespace }}/{{ $labels.pod }}"
+              description: "Pod {{ $labels.pod }} restarted >3 times in the last 30 minutes."
+          - alert: PodNotReady
+            expr: kube_pod_status_ready{condition="false"} > 0
+            for: 5m
+            labels:
+              severity: critical
+            annotations:
+              summary: "Pod not ready: {{ $labels.namespace }}/{{ $labels.pod }}"
+              description: "Pod {{ $labels.pod }} not ready for >5 minutes."
+      - name: nodes
+        interval: 30s
+        rules:
+          - alert: NodeDiskSpace
+            expr: (node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"}) * 100 < 20
+            for: 5m
+            labels:
+              severity: critical
+            annotations:
+              summary: "Node disk low: {{ $labels.node }}"
+              description: "Node {{ $labels.node }} has <20% disk space."
+          - alert: NodeNotReady
+            expr: kube_node_status_condition{condition="Ready",status="true"} == 0
+            for: 5m
+            labels:
+              severity: critical
+            annotations:
+              summary: "Node not ready: {{ $labels.node }}"
+              description: "Node {{ $labels.node }} is not ready for >5 minutes."
+      - name: application
+        interval: 30s
+        rules:
+          - alert: HighRequestLatency
+            expr: histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le)) > 0.5
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "High request latency"
+              description: "P95 latency is above 500ms for >5 minutes."
+          - alert: HighErrorRate
+            expr: (sum(rate(http_requests_total{status=~"5.."}[5m])) / sum(rate(http_requests_total[5m]))) * 100 > 5
+            for: 5m
+            labels:
+              severity: critical
+            annotations:
+              summary: "High error rate"
+              description: "HTTP 5xx error rate >5% in the last 5 minutes."
+          - alert: PrometheusTargetDown
+            expr: up == 0
+            for: 2m
+            labels:
+              severity: critical
+            annotations:
+              summary: "Prometheus target down: {{ $labels.job }}/{{ $labels.instance }}"
+              description: "Target {{ $labels.job }} ({{ $labels.instance }}) unreachable for >2 minutes."
