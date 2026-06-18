@@ -1,0 +1,57 @@
+# =============================================================================
+# SLO - Service Level Objectives
+# =============================================================================
+# Estas regras definem os objetivos de nível de serviço para a stack.
+# Quando violadas, disparam alertas que aparecem no Grafana.
+#
+# SLOs definidos:
+#   ✅ Disponibilidade:     > 95% dos serviços UP
+#   ✅ Confiabilidade:     Zero pods em CrashLoopBackOff
+#   ✅ Memória:            < 85% do request
+#   ✅ CPU:                < 85% do request
+# =============================================================================
+
+groups:
+- interval: 1m
+  name: SLO_-_Service_Level_Objectives
+  rules:
+  - alert: SLO_Disponibilidade_dos_Servicos
+    annotations:
+      description: "Disponibilidade dos serviços está em {{ $value | humanizePercentage }} (meta: 95%)"
+      summary: "SLO de Disponibilidade violado"
+    expr: avg(up{namespace="monitoring"}) < 0.95
+    for: 2m
+    labels:
+      severity: critical
+      slo: availability
+      team: platform
+
+  - alert: SLO_Pods_com_CrashLoopBackOff
+    annotations:
+      description: "Existem pods em estado crítico no cluster"
+      summary: "Pods com problemas detectados"
+    expr: sum(kube_pod_status_phase{phase=~"Pending|Unknown|Failed"}) > 0
+    for: 1m
+    labels:
+      severity: warning
+      slo: reliability
+
+  - alert: SLO_Memoria_dos_Pods
+    annotations:
+      description: "Memória acima de 85% do request"
+      summary: "Uso de memória acima do SLO"
+    expr: sum(container_memory_working_set_bytes{namespace="monitoring"}) / sum(kube_pod_container_resource_requests{namespace="monitoring", resource="memory"}) > 0.85
+    for: 5m
+    labels:
+      severity: warning
+      slo: memory
+
+  - alert: SLO_CPU_dos_Pods
+    annotations:
+      description: "CPU acima de 85% do request"
+      summary: "Uso de CPU acima do SLO"
+    expr: sum(rate(container_cpu_usage_seconds_total{namespace="monitoring"}[5m])) / sum(kube_pod_container_resource_requests{namespace="monitoring", resource="cpu"}) > 0.85
+    for: 5m
+    labels:
+      severity: warning
+      slo: cpu

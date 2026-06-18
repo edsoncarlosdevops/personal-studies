@@ -1,0 +1,90 @@
+{
+  "apiVersion": 1,
+  "groups": [
+    {
+      "name": "SLO - Service Level Objectives",
+      "interval": "1m",
+      "rules": [
+        {
+          "alert": "SLO - Alta Disponibilidade dos Serviços",
+          "expr": "avg(up{namespace=\"monitoring\"}) < 0.95",
+          "for": "2m",
+          "labels": {
+            "severity": "critical",
+            "slo": "availability",
+            "team": "platform"
+          },
+          "annotations": {
+            "summary": "SLO de Disponibilidade violado",
+            "description": "Disponibilidade dos serviços está em {{ $value | humanizePercentage }} (meta: 95%)"
+          }
+        },
+        {
+          "alert": "SLO - Pods com CrashLoopBackOff",
+          "expr": "sum(kube_pod_status_phase{phase=~\"Pending|Unknown|Failed\"}) > 0",
+          "for": "1m",
+          "labels": {
+            "severity": "warning",
+            "slo": "reliability"
+          },
+          "annotations": {
+            "summary": "Pods com problemas detectados",
+            "description": "Existem pods em estado crítico no cluster"
+          }
+        },
+        {
+          "alert": "SLO - Erros HTTP (5xx)",
+          "expr": "rate(prometheus_http_requests_total{code=~\"5..\"}[5m]) > 0.01",
+          "for": "3m",
+          "labels": {
+            "severity": "warning",
+            "slo": "error_rate"
+          },
+          "annotations": {
+            "summary": "Taxa de erro HTTP acima do SLO",
+            "description": "Erros 5xx acima de 1% nos últimos 5 minutos"
+          }
+        },
+        {
+          "alert": "SLO - Latência Alta",
+          "expr": "histogram_quantile(0.95, sum(rate(prometheus_http_request_duration_seconds_bucket[5m])) by (le)) > 1",
+          "for": "5m",
+          "labels": {
+            "severity": "warning",
+            "slo": "latency"
+          },
+          "annotations": {
+            "summary": "Latência acima do SLO",
+            "description": "P95 de latência está em {{ $value }}s (meta: < 1s)"
+          }
+        },
+        {
+          "alert": "SLO - Memória dos Pods",
+          "expr": "sum(container_memory_working_set_bytes{namespace=\"monitoring\"}) / sum(kube_pod_container_resource_requests{namespace=\"monitoring\", resource=\"memory\"}) > 0.85",
+          "for": "5m",
+          "labels": {
+            "severity": "warning",
+            "slo": "memory"
+          },
+          "annotations": {
+            "summary": "Uso de memória acima do SLO",
+            "description": "Memória acima de 85% do request"
+          }
+        },
+        {
+          "alert": "SLO - CPU dos Pods",
+          "expr": "sum(rate(container_cpu_usage_seconds_total{namespace=\"monitoring\"}[5m])) / sum(kube_pod_container_resource_requests{namespace=\"monitoring\", resource=\"cpu\"}) > 0.85",
+          "for": "5m",
+          "labels": {
+            "severity": "warning",
+            "slo": "cpu"
+          },
+          "annotations": {
+            "summary": "Uso de CPU acima do SLO",
+            "description": "CPU acima de 85% do request"
+          }
+        }
+      ]
+    }
+  ]
+}
