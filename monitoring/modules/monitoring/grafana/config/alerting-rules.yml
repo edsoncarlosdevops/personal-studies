@@ -1,0 +1,294 @@
+# =============================================================================
+# GRAFANA ALERTING RULES - SLOs (Service Level Objectives)
+# =============================================================================
+# 
+# SLI  → Service Level INDICATOR  → A métrica que medimos
+# SLO  → Service Level OBJECTIVE  → A meta que queremos atingir
+# SLA  → Service Level AGREEMENT  → O que acontece se violar
+#
+# Exemplo prático:
+#   SLI = avg(up) = % de serviços rodando
+#   SLO = "95% dos serviços devem estar UP"
+#   SLA = "Se ficar abaixo, enviar email para o squad em < 15 min"
+#
+# Essas regras são provisionadas automaticamente no Grafana durante
+# a instalação (via helm).
+# =============================================================================
+
+apiVersion: 1
+groups:
+  # ===========================================================================
+  # GRUPO SLO - Service Level Objectives
+  # ===========================================================================
+  # Cada regra abaixo define um SLO diferente.
+  # 
+  # Estrutura de uma regra:
+  #   1. data[0].model.expr  → SLI (o que medimos)
+  #   2. condition           → SLO (a condição que dispara)
+  #   3. for                 → SLO (quanto tempo violado antes de alertar)
+  #   4. labels.severity     → SLA (o impacto)
+  #   5. annotations         → SLA (quem notificar)
+  # ===========================================================================
+  - orgId: 1
+    name: "SLO"
+    folder: "Stack de Observabilidade"
+    interval: "30s"
+    rules:
+
+      # =====================================================================
+      # SLO #1 - DISPONIBILIDADE DOS SERVIÇOS
+      # =====================================================================
+      # 
+      # 📊 SLI: avg(up{namespace="monitoring"})
+      #   O que mede: Percentual de serviços respondendo no monitoring
+      #   up=1 → serviço rodando | up=0 → serviço caiu
+      #
+      # 🎯 SLO: > 95%
+      #   Meta: Pelo menos 95% dos serviços devem estar UP
+      #   Janela: 2 minutos abaixo da meta → dispara alerta
+      #
+      # 📋 SLA: CRITICAL
+      #   Se violar: Time de plataforma é notificado imediatamente
+      #   Exemplo: Se 3 de 20 serviços caírem (85%), alerta CRITICAL dispara
+      # =====================================================================
+      - title: "SLO - Disponibilidade dos Servicos"
+        condition: "C"
+        data:
+          # Passo 1: Buscar a métrica (SLI)
+          - refId: "A"
+            relativeTimeRange:
+              from: 300    # Últimos 5 minutos
+              to: 0
+            datasourceUid: "PBFA97CFB590B2093"  # Prometheus
+            model:
+              expr: "avg(up{namespace=\"monitoring\"})"
+              #        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+              #        SLI = média de serviços UP no namespace monitoring
+              intervalMs: 1000
+              maxDataPoints: 100
+              refId: "A"
+
+          # Passo 2: Comparar com a meta (SLO)
+          - refId: "B"
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: "__expr__"  # Expressão matemática
+            model:
+              type: "math"
+              expression: "$A < 0.95"
+              #                ^^^^^
+              #                SLO = 95% de disponibilidade
+              #                Se $A (SLI) for menor que 0.95 (95%), violou!
+              refId: "B"
+
+          # Passo 3: Resultado (true/false)
+          - refId: "C"
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: "__expr__"
+            model:
+              type: "math"
+              expression: "$B"
+              refId: "C"
+
+        noDataState: "Alerting"       # Se não houver dados, alerta também
+        execErrState: "Alerting"      # Se der erro, alerta também
+        for: "2m"                     # SLO: 2 minutos violado → confirma
+
+        labels:
+          severity: "critical"        # SLA: Impacto CRITICAL
+          slo: "availability"         # Tag para filtrar SLOs no Grafana
+
+        annotations:
+          summary: "SLO de Disponibilidade violado"
+          description: >-
+            SLI=Disponibilidade | SLO=>95% | Valor atual: {{ $values.A }}
+            Ação SLA: Notificar time de plataforma
+          runbook_url: "https://wiki.empresa.com/runbooks/slo-disponibilidade"
+
+      # =====================================================================
+      # SLO #2 - MEMÓRIA DOS PODS
+      # =====================================================================
+      #
+      # 📊 SLI: uso de memória / request de memória
+      #   Ex: Se um pod tem request=256Mi e está usando 200Mi → 78%
+      #
+      # 🎯 SLO: < 85% do request
+      #   Meta: Não usar mais de 85% da memória solicitada
+      #
+      # 📋 SLA: WARNING
+      #   Se violar: Time é alertado (não crítico, mas precisa acompanhar)
+      #   Pois se passar de 100% → OOMKill (pod morto por falta de memória)
+      # =====================================================================
+      - title: "SLO - Memoria dos Pods"
+        condition: "C"
+        data:
+          - refId: "A"
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: "PBFA97CFB590B2093"
+            model:
+              expr: |-
+                # SLI: Calcula a % de memória usada em relação ao request
+                sum(container_memory_working_set_bytes{namespace="monitoring"})
+                #   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                #   Memória REALMENTE usada pelo container (em bytes)
+                /
+                sum(kube_pod_container_resource_requests{namespace="monitoring", resource="memory"})
+                #   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                #   Memória SOLICITADA (request) no deployment (em bytes)
+                #
+                # Exemplo: 512MB / 1024MB = 0.5 (50%)
+                intervalMs: 1000
+                maxDataPoints: 100
+                refId: "A"
+
+          - refId: "B"
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: "__expr__"
+            model:
+              type: "math"
+              expression: "$A > 0.85"
+              #                ^^^^^
+              #                SLO: 85% da memória
+              #                Se passar de 85%, pode aproximar de OOM
+              refId: "B"
+
+          - refId: "C"
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: "__expr__"
+            model:
+              type: "math"
+              expression: "$B"
+              refId: "C"
+
+        noDataState: "OK"
+        execErrState: "Alerting"
+        for: "5m"
+
+        labels:
+          severity: "warning"         # SLA: WARNING (não crítico ainda)
+          slo: "memory"
+
+        annotations:
+          summary: "SLO de Memoria violado"
+          description: >-
+            SLI=Memoria usada/request | SLO=<85% | Valor atual: {{ $values.A }}
+            Risco: Se chegar a 100% → OOMKill (pod morto)
+            Ação SLA: Verificar se precisa aumentar resource requests
+
+      # =====================================================================
+      # SLO #3 - CPU DOS PODS
+      # =====================================================================
+      #
+      # 📊 SLI: uso de CPU / request de CPU
+      #   Ex: Pod usando 200m de CPU com request=500m → 40%
+      #
+      # 🎯 SLO: < 85% do request
+      #   Meta: Não usar mais de 85% da CPU solicitada
+      #
+      # 📋 SLA: WARNING
+      #   CPU alta = lentidão. Se passar de 100%, o pod é throttled (limitado)
+      # =====================================================================
+      - title: "SLO - CPU dos Pods"
+        condition: "C"
+        data:
+          - refId: "A"
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: "PBFA97CFB590B2093"
+            model:
+              expr: |-
+                # SLI: Calcula a % de CPU usada em relação ao request
+                sum(rate(container_cpu_usage_seconds_total{namespace="monitoring"}[5m]))
+                #   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                #   CPU usada nos últimos 5 minutos (em cores)
+                #   rate = média por segundo, [5m] = janela de 5 min
+                /
+                sum(kube_pod_container_resource_requests{namespace="monitoring", resource="cpu"})
+                #   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                #   CPU SOLICITADA (request) no deployment (em cores)
+                #
+                # Exemplo: 200m / 500m = 0.4 (40%)
+                intervalMs: 1000
+                maxDataPoints: 100
+                refId: "A"
+
+          - refId: "B"
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: "__expr__"
+            model:
+              type: "math"
+              expression: "$A > 0.85"
+              #                ^^^^^
+              #                SLO: 85% da CPU
+              #                Acima disso, pode causar lentidão
+              refId: "B"
+
+          - refId: "C"
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: "__expr__"
+            model:
+              type: "math"
+              expression: "$B"
+              refId: "C"
+
+        noDataState: "OK"
+        execErrState: "Alerting"
+        for: "5m"
+
+        labels:
+          severity: "warning"
+          slo: "cpu"
+
+        annotations:
+          summary: "SLO de CPU violado"
+          description: >-
+            SLI=CPU usada/request | SLO=<85% | Valor atual: {{ $values.A }}
+            Risco: Acima de 100% → throttling (pod limitado)
+            Ação SLA: Verificar necessidade de aumentar resource requests
+
+# =============================================================================
+# GUIA RÁPIDO - SLI / SLO / SLA
+# =============================================================================
+#
+# 📊 SLI (Service Level Indicator) - "O que medimos?"
+#   ┌────────────────────────────────────────────┐
+#   │  Exemplo: avg(up) = % de serviços rodando  │
+#   │  Responde: "Quantos % dos pods tão UP?"    │
+#   └────────────────────────────────────────────┘
+#
+# 🎯 SLO (Service Level Objective) - "Qual a meta?"
+#   ┌────────────────────────────────────────────┐
+#   │  Exemplo: avg(up) > 0.95 (95%)             │
+#   │  Responde: "Qual o mínimo aceitável?"      │
+#   │  Quanto maior o SLO, mais caro/manutenção  │
+#   │  99%   → ~3 dias de downtime/ano           │
+#   │  99.9% → ~8 horas de downtime/ano          │
+#   │  99.99%→ ~52 minutos de downtime/ano       │
+#   └────────────────────────────────────────────┘
+#
+# 📋 SLA (Service Level Agreement) - "O que fazer?"
+#   ┌────────────────────────────────────────────┐
+#   │  Exemplo: Se violar, notificar squad       │
+#   │  em < 15 min via Slack + Email             │
+#   │  Responde: "Qual o plano de ação?"         │
+#   └────────────────────────────────────────────┘
+#
+# ⚠️ IMPORTANTE:
+#   - SLI muito rigoroso (ex: > 99.99%) = falso alerta direto
+#   - SLI muito frouxo (ex: > 50%) = não detecta problemas
+#   - Comece com 95% e ajuste conforme aprende
+# =============================================================================

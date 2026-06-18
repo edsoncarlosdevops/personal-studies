@@ -73,6 +73,12 @@ datasources:
           handleAlertManagerManually: true
           implementation: prometheus
 
+# Configuracao de alertas SLO (Service Level Objectives)
+# Essas regras definem SLI/SLO/SLA para a stack
+alerting:
+  alert_rules:
+    - file: alerting-rules.yml
+
 dashboardProviders:
   dashboardproviders.yaml:
     apiVersion: 1
