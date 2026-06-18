@@ -2,17 +2,17 @@ terraform {
   source = "../../../../../monitoring/modules/monitoring/opentelemetry-operator"
 }
 
-include {
+include "root" {
   path = find_in_parent_folders()
 }
 
-dependencies {
-  paths = ["../../aks", "../cert-manager"]
+include "monitoring" {
+  path = "${get_terragrunt_dir()}/../terragrunt.hcl"
 }
 
-dependency "aks" {
-  config_path = "../../aks"
-}
+
+
+
 
 dependency "cert-manager" {
   config_path = "../cert-manager"

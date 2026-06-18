@@ -2,17 +2,17 @@ terraform {
   source = "../../../../../monitoring/modules/monitoring/cert-manager"
 }
 
-include {
+include "root" {
   path = find_in_parent_folders()
 }
 
-dependencies {
-  paths = ["../../aks"]
+include "monitoring" {
+  path = "${get_terragrunt_dir()}/../terragrunt.hcl"
 }
 
-dependency "aks" {
-  config_path = "../../aks"
-}
+
+
+
 
 inputs = {
   cert_manager_release_name   = "cert-manager"
