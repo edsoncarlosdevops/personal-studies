@@ -1,4 +1,4 @@
-# Azure Pipeline - Infrastructure Validation & Reports
+# Azure Pipeline - AKS connectivity & Helm deploy
 
 trigger:
   branches:
@@ -8,58 +8,67 @@ trigger:
 pool:
   vmImage: ubuntu-latest
 
+variables:
+  azureSubscription: 'azure-pipeline-observability-key'
+  resourceGroup: 'rg-observability'
+  aksCluster: 'aks-observability'
+
 steps:
-- bash: |
-    echo "=========================================="
-    echo " Pipeline: Observability Stack Validation"
-    echo " Repo: personal-studies"
-    echo " Branch: $(Build.SourceBranch)"
-    echo " Commit: $(Build.SourceVersion)"
-    echo "=========================================="
-  displayName: 'Build info'
+- task: AzureCLI@2
+  displayName: 'Check AKS cluster status'
+  inputs:
+    azureSubscription: '$(azureSubscription)'
+    scriptType: 'bash'
+    scriptLocation: 'inlineScript'
+    inlineScript: |
+      az aks show \
+        --resource-group $(resourceGroup) \
+        --name $(aksCluster) \
+        --query "{name:name, state:provisioningState, k8s:kubernetesVersion}" \
+        --output table
 
-- bash: |
-    # Install Terraform (linux amd64)
-    wget -q https://releases.hashicorp.com/terraform/1.10.0/terraform_1.10.0_linux_amd64.zip -O terraform.zip
-    unzip -q terraform.zip
-    sudo mv terraform /usr/local/bin/
-    rm terraform.zip
-    
-    echo "Terraform installed:"
-    terraform --version
-  displayName: 'Install Terraform'
+- task: AzureCLI@2
+  displayName: 'Get kubeconfig and list namespaces'
+  inputs:
+    azureSubscription: '$(azureSubscription)'
+    scriptType: 'bash'
+    scriptLocation: 'inlineScript'
+    inlineScript: |
+      az aks get-credentials \
+        --resource-group $(resourceGroup) \
+        --name $(aksCluster) \
+        --admin \
+        --overwrite-existing \
+        --file kubeconfig
 
-- bash: |
-    echo "Validating Terraform modules..."
+      export KUBECONFIG=kubeconfig
 
-    for dir in \
-      azure/observability-stack-azure/modules/aks \
-      azure/observability-stack-azure/deploy/environments/dev/tf \
-      azure/observability-stack-azure/bootstrap; 
-    do
-      echo "--- Checking $dir ---"
-      cd "$(Build.SourcesDirectory)/$dir"
-      terraform init -backend=false 2>/dev/null
-      
-      terraform fmt -check -recursive
-      if [ $? -eq 0 ]; then
-        echo "  Format: OK"
-      else
-        echo "  Format: NEEDS FIX (run 'terraform fmt')"
-      fi
-      
-      terraform validate
-      if [ $? -eq 0 ]; then
-        echo "  Validate: OK"
-      else
-        echo "  Validate: FAILED"
-      fi
+      echo "=== Nodes ==="
+      kubectl get nodes
+
       echo ""
-    done
-  displayName: 'Validate all Terraform modules'
+      echo "=== Namespaces ==="
+      kubectl get namespaces
 
-- bash: |
-    echo "Project structure:"
-    echo ""
-    tree azure/observability-stack-azure/ --dirsfirst -I '.terraform*|.terragrunt*|*.tfstate*'
-  displayName: 'Show project structure'
+      echo ""
+      echo "=== Pods in monitoring ==="
+      kubectl get pods -n monitoring
+
+- task: AzureCLI@2
+  displayName: 'Check Helm releases in monitoring'
+  inputs:
+    azureSubscription: '$(azureSubscription)'
+    scriptType: 'bash'
+    scriptLocation: 'inlineScript'
+    inlineScript: |
+      az aks get-credentials \
+        --resource-group $(resourceGroup) \
+        --name $(aksCluster) \
+        --admin \
+        --overwrite-existing \
+        --file kubeconfig
+
+      export KUBECONFIG=kubeconfig
+
+      echo "=== Helm releases ==="
+      helm list -n monitoring || echo "Helm not installed or no releases"
