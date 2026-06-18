@@ -1,5 +1,5 @@
 terraform {
-  source = "../../../../../monitoring/modules/monitoring/alertmanager"
+  source = "../../../../../../../monitoring/modules/monitoring/alertmanager"
 }
 
 include "root" {
@@ -7,7 +7,7 @@ include "root" {
 }
 
 include "monitoring" {
-  path = "${get_terragrunt_dir()}/../terragrunt.hcl"
+  path = "${get_terragrunt_dir()}/../root.hcl"
 }
 
 
@@ -16,6 +16,11 @@ include "monitoring" {
 
 dependency "prometheus" {
   config_path = "../prometheus"
+  mock_outputs = {
+    prometheus_url_internal = "http://prometheus-server.monitoring.svc.cluster.local:80"
+    prometheus_service_name = "prometheus-server"
+    prometheus_namespace    = "monitoring"
+  }
 }
 
 inputs = {
@@ -25,3 +30,4 @@ inputs = {
   alertmanager_chart_version  = "1.8.0"
   alertmanager_repository_url = "https://prometheus-community.github.io/helm-charts"
 }
+

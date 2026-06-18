@@ -1,5 +1,5 @@
 terraform {
-  source = "../../../../../monitoring/modules/monitoring/opencost"
+  source = "../../../../../../../monitoring/modules/monitoring/opencost"
 }
 
 include "root" {
@@ -7,7 +7,7 @@ include "root" {
 }
 
 include "monitoring" {
-  path = "${get_terragrunt_dir()}/../terragrunt.hcl"
+  path = "${get_terragrunt_dir()}/../root.hcl"
 }
 
 
@@ -16,6 +16,11 @@ include "monitoring" {
 
 dependency "prometheus" {
   config_path = "../prometheus"
+  mock_outputs = {
+    prometheus_url_internal = "http://prometheus-server.monitoring.svc.cluster.local:80"
+    prometheus_service_name = "prometheus-server"
+    prometheus_namespace    = "monitoring"
+  }
 }
 
 inputs = {
@@ -29,3 +34,4 @@ inputs = {
   opencost_resources_preset      = "small"
   opencost_replica_count         = 1
 }
+

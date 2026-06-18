@@ -1,5 +1,5 @@
 terraform {
-  source = "../../../../../monitoring/modules/monitoring/opentelemetry-collector"
+  source = "../../../../../../../monitoring/modules/monitoring/opentelemetry-collector"
 }
 
 include "root" {
@@ -7,7 +7,7 @@ include "root" {
 }
 
 include "monitoring" {
-  path = "${get_terragrunt_dir()}/../terragrunt.hcl"
+  path = "${get_terragrunt_dir()}/../root.hcl"
 }
 
 
@@ -16,6 +16,10 @@ include "monitoring" {
 
 dependency "tempo" {
   config_path = "../tempo"
+  mock_outputs = {
+    tempo_service_name = "tempo"
+    tempo_namespace    = "monitoring"
+  }
 }
 
 inputs = {
@@ -26,3 +30,4 @@ inputs = {
   otel_collector_repository_url = "https://open-telemetry.github.io/opentelemetry-helm-charts"
   otel_collector_replica_count  = 1
 }
+

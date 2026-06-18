@@ -46,29 +46,8 @@ variable "aks_subnet_prefixes" {
   default     = ["10.0.1.0/24"]
 }
 
-variable "postgresql_subnet_name" {
-  description = "PostgreSQL subnet name"
-  type        = string
-  default     = "snet-postgresql"
-}
-
-variable "postgresql_subnet_prefixes" {
-  description = "PostgreSQL subnet address prefixes"
-  type        = list(string)
-  default     = ["10.0.2.0/24"]
-}
-
-variable "pe_subnet_name" {
-  description = "Private Endpoints subnet name"
-  type        = string
-  default     = "snet-private-endpoints"
-}
-
-variable "pe_subnet_prefixes" {
-  description = "Private Endpoints subnet address prefixes"
-  type        = list(string)
-  default     = ["10.0.3.0/24"]
-}
+# PostgreSQL and Private Endpoints removed
+# (eastus2 region does not support PostgreSQL in this subscription)
 
 variable "allowed_api_source_ips" {
   description = "Source IPs allowed to reach AKS API server"

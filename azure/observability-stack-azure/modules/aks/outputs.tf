@@ -26,13 +26,7 @@ output "aks_subnet_name" {
   value = azurerm_subnet.aks.name
 }
 
-output "postgresql_subnet_id" {
-  value = azurerm_subnet.postgresql.id
-}
-
-output "postgresql_subnet_name" {
-  value = azurerm_subnet.postgresql.name
-}
+# PostgreSQL outputs removed
 
 output "kube_config_raw" {
   value     = azurerm_kubernetes_cluster.this.kube_config_raw

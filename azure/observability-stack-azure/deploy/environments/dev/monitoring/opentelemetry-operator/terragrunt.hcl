@@ -1,5 +1,5 @@
 terraform {
-  source = "../../../../../monitoring/modules/monitoring/opentelemetry-operator"
+  source = "../../../../../../../monitoring/modules/monitoring/opentelemetry-operator"
 }
 
 include "root" {
@@ -7,7 +7,7 @@ include "root" {
 }
 
 include "monitoring" {
-  path = "${get_terragrunt_dir()}/../terragrunt.hcl"
+  path = "${get_terragrunt_dir()}/../root.hcl"
 }
 
 
@@ -16,6 +16,10 @@ include "monitoring" {
 
 dependency "cert-manager" {
   config_path = "../cert-manager"
+  mock_outputs = {
+    cert_manager_service_name = "cert-manager"
+    cert_manager_namespace    = "cert-manager"
+  }
 }
 
 inputs = {
@@ -26,3 +30,4 @@ inputs = {
   otel_operator_repository_url = "https://open-telemetry.github.io/opentelemetry-helm-charts"
   otel_operator_replica_count  = 1
 }
+

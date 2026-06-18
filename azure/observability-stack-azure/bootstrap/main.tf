@@ -1,6 +1,6 @@
-# Bootstrap: Cria o backend Azure Storage para remote state
-# Aplica primeiro: `terraform apply`
-# Depois os ambientes usam este backend automaticamente
+# Bootstrap: Creates Azure Storage backend for remote state
+# Run first: `terraform apply`
+# Environments will use this backend automatically
 
 terraform {
   required_providers {

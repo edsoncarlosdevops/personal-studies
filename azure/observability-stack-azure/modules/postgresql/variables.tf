@@ -45,11 +45,13 @@ variable "storage_mb" {
 }
 
 variable "subnet_name" {
+  default     = ""
   description = "Subnet name for private endpoint"
   type        = string
 }
 
 variable "vnet_name" {
+  default     = ""
   description = "VNet name"
   type        = string
 }
@@ -79,4 +81,14 @@ variable "tags" {
     ManagedBy = "terraform"
     Project   = "observability-stack-azure"
   }
+}
+
+variable "vnet_id" {
+  description = "The ID of the Virtual Network for the DNS link"
+  type        = string
+}
+
+variable "subnet_id" {
+  description = "The ID of the subnet for the PostgreSQL Flexible Server"
+  type        = string
 }

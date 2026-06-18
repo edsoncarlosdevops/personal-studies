@@ -1,5 +1,5 @@
 terraform {
-  source = "../../../../../monitoring/modules/monitoring/loki"
+  source = "../../../../../../../monitoring/modules/monitoring/loki"
 }
 
 include "root" {
@@ -7,7 +7,7 @@ include "root" {
 }
 
 include "monitoring" {
-  path = "${get_terragrunt_dir()}/../terragrunt.hcl"
+  path = "${get_terragrunt_dir()}/../root.hcl"
 }
 
 

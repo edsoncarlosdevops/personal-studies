@@ -1,5 +1,5 @@
 terraform {
-  source = "../../../../../monitoring/modules/monitoring/promtail"
+  source = "../../../../../../../monitoring/modules/monitoring/promtail"
 }
 
 include "root" {
@@ -7,7 +7,7 @@ include "root" {
 }
 
 include "monitoring" {
-  path = "${get_terragrunt_dir()}/../terragrunt.hcl"
+  path = "${get_terragrunt_dir()}/../root.hcl"
 }
 
 
@@ -16,6 +16,11 @@ include "monitoring" {
 
 dependency "loki" {
   config_path = "../loki"
+  mock_outputs = {
+    loki_url_internal = "http://loki.monitoring.svc.cluster.local:3100"
+    loki_service_name = "loki"
+    loki_namespace    = "monitoring"
+  }
 }
 
 inputs = {
@@ -26,3 +31,4 @@ inputs = {
   promtail_repository_url = "https://grafana.github.io/helm-charts"
   promtail_loki_endpoint  = "http://loki.monitoring.svc.cluster.local:3100/loki/api/v1/push"
 }
+

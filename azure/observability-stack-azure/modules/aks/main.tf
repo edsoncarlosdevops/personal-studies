@@ -29,27 +29,12 @@ resource "azurerm_subnet" "aks" {
   address_prefixes     = var.aks_subnet_prefixes
 }
 
-resource "azurerm_subnet" "postgresql" {
-  name                 = var.postgresql_subnet_name
-  resource_group_name  = azurerm_resource_group.this.name
-  virtual_network_name = azurerm_virtual_network.this.name
-  address_prefixes     = var.postgresql_subnet_prefixes
-
-  delegation {
-    name = "postgresql-delegation"
-    service_delegation {
-      name    = "Microsoft.DBforPostgreSQL/flexibleServers"
-      actions = ["Microsoft.Network/virtualNetworks/subnets/join/action"]
-    }
-  }
-}
-
-resource "azurerm_subnet" "private_endpoints" {
-  name                 = var.pe_subnet_name
-  resource_group_name  = azurerm_resource_group.this.name
-  virtual_network_name = azurerm_virtual_network.this.name
-  address_prefixes     = var.pe_subnet_prefixes
-}
+# ═══════════════════════════════════════════════════════════
+# NOTE: PostgreSQL disabled - eastus2 region does not
+# support PostgreSQL Flexible Server in this subscription.
+# Subnets snet-postgresql and snet-private-endpoints were
+# removed along with the postgresql module.
+# ═══════════════════════════════════════════════════════════
 
 resource "azurerm_network_security_group" "this" {
   name                = "${var.cluster_name}-nsg"
@@ -66,21 +51,21 @@ resource "azurerm_network_security_rule" "allow_api_server" {
   protocol                    = "Tcp"
   source_port_range           = "*"
   destination_port_range      = "443"
-  source_address_prefixes     = var.allowed_api_source_ips
+  source_address_prefix       = "*"
   destination_address_prefix  = "*"
   resource_group_name         = azurerm_resource_group.this.name
   network_security_group_name = azurerm_network_security_group.this.name
 }
 
-resource "azurerm_network_security_rule" "allow_ssh_from_bastion" {
-  name                        = "AllowSSHFromBastion"
+resource "azurerm_network_security_rule" "allow_ssh" {
+  name                        = "AllowSSH"
   priority                    = 110
   direction                   = "Inbound"
   access                      = "Allow"
   protocol                    = "Tcp"
   source_port_range           = "*"
   destination_port_range      = "22"
-  source_address_prefix       = "AzureBastionSubnet"
+  source_address_prefix       = "*"
   destination_address_prefix  = "*"
   resource_group_name         = azurerm_resource_group.this.name
   network_security_group_name = azurerm_network_security_group.this.name
@@ -134,8 +119,8 @@ resource "azurerm_kubernetes_cluster" "this" {
   network_profile {
     network_plugin = "azure"
     network_policy = "azure"
-    service_cidr   = "10.0.0.0/16"
-    dns_service_ip = "10.0.0.10"
+    service_cidr   = "172.16.0.0/16"
+    dns_service_ip = "172.16.0.10"
   }
 
   tags = var.tags
@@ -158,6 +143,16 @@ resource "azurerm_private_dns_zone_virtual_network_link" "aks" {
 resource "local_file" "kubeconfig" {
   content  = azurerm_kubernetes_cluster.this.kube_config_raw
   filename = "${path.module}/kubeconfig_${var.cluster_name}"
+}
+
+resource "local_file" "update_kubeconfig_script" {
+  content  = <<-SCRIPT
+    #!/bin/bash
+    # Generates admin kubeconfig for AKS (bypasses RBAC)
+    az aks get-credentials --resource-group ${var.resource_group_name} --name ${var.cluster_name} --admin -f "${path.module}/kubeconfig_${var.cluster_name}" --overwrite-existing
+    echo "Kubeconfig updated with admin credentials at: ${path.module}/kubeconfig_${var.cluster_name}"
+  SCRIPT
+  filename = "${path.module}/update-kubeconfig.sh"
 }
 
 resource "azurerm_role_assignment" "deployer" {

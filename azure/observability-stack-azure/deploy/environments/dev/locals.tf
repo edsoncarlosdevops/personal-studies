@@ -26,5 +26,4 @@ locals {
   # Resource names
   resource_group_name = "rg-observability"
   cluster_name        = "aks-observability"
-  postgres_server     = "psql-observability"
 }

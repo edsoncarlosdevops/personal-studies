@@ -10,6 +10,6 @@ output "vnet_id" {
   value = module.aks.vnet_id
 }
 
-output "postgresql_fqdn" {
-  value = module.postgresql.fqdn
-}
+/* output "postgresql_fqdn" {
+  value = module.postgresql.server_fqdn
+} */
