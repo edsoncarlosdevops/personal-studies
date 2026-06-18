@@ -1,38 +1,122 @@
+# =============================================================================
+# OpenTelemetry Collector - Configuration System
+# =============================================================================
+#
+# O OTel Collector é o agente único de observabilidade.
+# Ele coleta TRACES + MÉTRICAS + LOGS de todos os pods do cluster
+# e envia para: Tempo (traces), Prometheus (métricas), Loki (logs).
+#
+# Vantagens do OTel Collector vs ferramentas separadas:
+#   - 1 agente faz tudo (vs Promtail só logs + node-exporter só métricas)
+#   - Padrão CNCF (mercado está migrando para ele)
+#   - Configuração declarativa via CRD / YAML
+#
+# Fluxo completo:
+#   Pods → filelog (logs do disco) + OTLP (traces/métricas da app)
+#        → k8sattributes (enriquece com namespace/pod/container)
+#        → batch (agrupa para eficiência)
+#        → Loki (logs) + Prometheus (métricas) + Tempo (traces)
+# =============================================================================
+
 replicaCount: ${otel_collector_replica_count}
+
+# [IMPORTANTE] mode: daemonset
+# ----------------------------------------
+# DaemonSet = 1 pod em cada node do cluster.
+# É necessário porque o filelog lê os logs do disco do node
+# (/var/log/pods/*/*/*.log). Sem estar no mesmo node,
+# o collector não consegue acessar os arquivos de log.
+#
+# Se fosse "deployment" (1 pod apenas), só coletaria logs
+# dos pods que estão no MESMO node que ele.
 mode: daemonset
+
 image:
   repository: otel/opentelemetry-collector-contrib
+  # [IMPORTANTE] Usar a imagem CONTRIB (não a imagem base).
+  # A imagem "contrib" inclui plugins extras como:
+  #   - filelog receiver (ler logs do disco)
+  #   - k8sattributes processor (enriquecer com metadata K8s)
+  #   - loki exporter (enviar logs para o Loki)
+  # A imagem "base" (otel/opentelemetry-collector) NÃO tem isso.
   tag: 0.112.0
+
 config:
+  # ===========================================================================
+  # EXPORTERS - Para onde os dados vão
+  # ===========================================================================
   exporters:
     debug: {}
+    
+    # 🔗 EXPORTER DE TRACES → Tempo
+    # Envia traces das aplicações para o Tempo.
+    # Usa OTLP gRPC na porta 4317 (INGESTÃO).
+    # [ATENCAO] Tempo usa 4317 para INGESTÃO, 3100 para CONSULTA (Grafana)
     otlp:
-      endpoint: tempo.monitoring.svc.cluster.local:4317
+      endpoint: "tempo.monitoring.svc.cluster.local:4317"
       sending_queue:
         enabled: true
         num_consumers: 4
         queue_size: 1000
       tls:
         insecure: true
+
+    # 📈 EXPORTER DE MÉTRICAS → Prometheus
+    # Expõe métricas no formato Prometheus na porta 8889.
+    # O Prometheus raspa (scrape) essas métricas como se fosse
+    # um target qualquer. Configurado no prometheus.yml.
     prometheus:
-      endpoint: 0.0.0.0:8889
+      endpoint: "0.0.0.0:8889"
       resource_to_telemetry_conversion:
         enabled: true
+
+    # 📝 EXPORTER DE LOGS → Loki
+    # Envia logs coletados pelo filelog para o Loki.
+    # Usa a API HTTP de push do Loki (/loki/api/v1/push).
+    # As labels (namespace, pod, container) são adicionadas
+    # pelo k8sattributes processor ANTES de enviar.
     loki:
-      endpoint: http://loki.monitoring.svc.cluster.local:3100/loki/api/v1/push
+      endpoint: "http://loki.monitoring.svc.cluster.local:3100/loki/api/v1/push"
       tls:
         insecure: true
+
+  # ===========================================================================
+  # EXTENSIONS - Utilitários do Collector
+  # ===========================================================================
   extensions:
     health_check:
       endpoint: ${env:MY_POD_IP}:13133
+
+  # ===========================================================================
+  # PROCESSORS - O que faz com os dados antes de exportar
+  # ===========================================================================
   processors:
+    # Agrupa dados em lotes para enviar de forma mais eficiente.
+    # Em vez de enviar 1 log por vez, espera 5s ou 1024 itens.
     batch:
       send_batch_size: 1024
       timeout: 5s
+
+    # Limita uso de memória para não matar o node.
+    # Se passar de 80%, começa a descartar dados menos importantes.
     memory_limiter:
       check_interval: 5s
       limit_percentage: 80
       spike_limit_percentage: 25
+
+    # 🆕 PROCESSADOR K8S ATTRIBUTES - Enriquece logs com metadata
+    # -----------------------------------------------------------
+    # [SLI] Esse processor adiciona labels IMPORTANTES para os logs:
+    #   - k8s.namespace.name → namespace do pod
+    #   - k8s.pod.name → nome do pod
+    #   - k8s.container.name → nome do container
+    #   - k8s.node.name → node onde o pod está
+    #
+    # Sem isso, os logs chegariam no Loki sem identificação de
+    # namespace, impossibilitando filtrar por namespace no Grafana.
+    #
+    # [REQUISITO] Precisa de permissão ClusterRole para listar pods
+    # (veja o arquivo de RBAC no módulo de monitoramento)
     k8sattributes:
       auth_type: serviceAccount
       extract:
@@ -41,13 +125,27 @@ config:
         - k8s.pod.name
         - k8s.container.name
         - k8s.node.name
+
+  # ===========================================================================
+  # RECEIVERS - De onde os dados vêm
+  # ===========================================================================
   receivers:
+    # 🔗 RECEPTOR OTLP - Traces e Métricas via SDK
+    # Recebe dados das aplicações que usam OpenTelemetry SDK
+    # (auto-instrumentação ou manual).
+    # Portas:
+    #   - 4317: gRPC (recomendado para performance)
+    #   - 4318: HTTP (alternativa)
     otlp:
       protocols:
         grpc:
           endpoint: 0.0.0.0:4317
         http:
           endpoint: 0.0.0.0:4318
+
+    # 📈 RECEPTOR PROMETHEUS - Auto-métricas do Collector
+    # Coleta métricas do próprio OTel Collector (para monitorar
+    # quem monitora). O Prometheus raspa essas métricas.
     prometheus:
       config:
         scrape_configs:
@@ -56,23 +154,86 @@ config:
           static_configs:
           - targets:
             - ${env:MY_POD_IP}:8888
+
+    # 📝 RECEPTOR FILELOG - Logs dos containers
+    # -----------------------------------------------------------
+    # [SLI] Lê os logs dos containers DIRETAMENTE do disco do node.
+    # Cada pod escreve logs em:
+    #   /var/log/pods/<namespace>_<pod>_<uid>/<container>/0.log
+    #
+    # O glob pattern /var/log/pods/*/*/*.log captura TODOS os logs
+    # de TODOS os namespaces, pods e containers.
+    #
+    # [REQUISITO] O volume /var/log/pods precisa estar montado
+    # no container (veja o DaemonSet, que monta via hostPath).
+    #
+    # [DIFERENÇA] Diferente do Promtail (que só faz isso),
+    # o OTel Collector faz logs + traces + métricas em 1 agente só.
     filelog:
       include:
-      - /var/log/pods/*/*/*.log
+        - /var/log/pods/*/*/*.log
       include_file_name: false
       include_file_path: true
-      start_at: beginning
+      start_at: beginning    # Começa do início do arquivo
       operators:
-      - type: move
-        from: attributes.message
-        to: body
-      - type: add
-        field: attributes.source
-        value: kubernetes
+        # Tenta interpretar o log como JSON primeiro
+        # (útil para logs estruturados como JSON)
+        - type: json_parser
+          if: 'body matches "^{\\"'
+          timestamp:
+            parse_from: attributes.time
+            layout: '%Y-%m-%dT%H:%M:%S.%LZ'
+          severity:
+            parse_from: attributes.stream
+            map:
+              stdout: info
+              stderr: error
+        
+        # Se não for JSON, tenta extrair o nível (INFO, ERROR, etc)
+        # usando regex. Ex: "ERROR: conexão falhou" → level=error
+        - type: regex_parser
+          if: 'body matches "^[A-Z]"'
+          regex: '^(?P<level>[A-Z]+)\\s'
+          severity:
+            parse_from: attributes.level
+            map:
+              INFO: info
+              WARN: warn
+              ERROR: error
+              DEBUG: debug
+        
+        # Adiciona label indicando que a fonte é Kubernetes
+        - type: add
+          field: attributes.source
+          value: kubernetes
+
+  # ===========================================================================
+  # SERVICE - Pipeline de dados
+  # ===========================================================================
+  # Define o fluxo: RECEIVER → PROCESSADOR → EXPORTER para cada tipo de dado.
+  #
+  # 📊 SLI (Service Level Indicator):
+  #   - Traces: OTLP receiver → batch → Tempo
+  #   - Métricas: OTLP receiver → batch → Prometheus
+  #   - Logs: filelog → k8sattributes → batch → Loki
+  #
+  # 🎯 SLO (Service Level Objective):
+  #   - Todos os pipelines devem estar funcionando 24/7
+  #   - Logs de todos os namespaces coletados em < 30s
+  #
+  # 📋 SLA (Service Level Agreement):
+  #   - Se algum pipeline quebrar, alerta no Grafana
+  #   - Ver SLO_Disponibilidade_dos_Servicos no Grafana Alerting
+  # ===========================================================================
   service:
     extensions:
     - health_check
+
     pipelines:
+      # Pipeline de TRACES
+      # Recebe: App via OTLP SDK
+      # Processa: memory_limiter + batch
+      # Exporta: Tempo (armazenamento de traces)
       traces:
         exporters:
         - otlp
@@ -81,6 +242,11 @@ config:
         - batch
         receivers:
         - otlp
+
+      # Pipeline de MÉTRICAS
+      # Recebe: App via OTLP SDK
+      # Processa: batch (memory_limiter não necessário p/ métricas)
+      # Exporta: Prometheus (via endpoint :8889)
       metrics:
         exporters:
         - prometheus
@@ -88,6 +254,19 @@ config:
         - batch
         receivers:
         - otlp
+
+      # Pipeline de LOGS
+      # -----------------------------------------------------------
+      # [SLI] filelog → k8sattributes → batch → Loki
+      #
+      # 1. filelog: Lê logs do disco do node (/var/log/pods)
+      # 2. k8sattributes: Enriquece com namespace/pod/container
+      # 3. memory_limiter: Protege contra picos de memória
+      # 4. batch: Agrupa logs para enviar eficientemente
+      # 5. Loki: Armazena e indexa os logs
+      #
+      # [SLO] Logs de TODOS os namespaces disponíveis em < 30s
+      # [SLA] Se atrasar, alerta SLO de disponibilidade dispara
       logs:
         exporters:
         - debug
@@ -98,11 +277,23 @@ config:
         - batch
         receivers:
         - filelog
+
     telemetry:
       logs:
         level: info
       metrics:
         address: 0.0.0.0:8888
+
+# =============================================================================
+# RECURSOS (Resource requests/limits)
+# =============================================================================
+# Cada pod do DaemonSet consome recursos do node.
+# Ajuste conforme a quantidade de logs no cluster.
+#
+# Referência:
+#   - 100m CPU / 128Mi RAM → ~50 pods com logs ativos
+#   - 500m CPU / 512Mi RAM → ~500 pods com logs ativos
+# =============================================================================
 resources:
   limits:
     cpu: 500m
