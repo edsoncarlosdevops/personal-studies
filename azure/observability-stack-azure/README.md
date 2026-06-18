@@ -1,6 +1,11 @@
 # Observability Stack on Azure (AKS)
 
-Full observability stack deployed on **Azure Kubernetes Service** using **Terraform**, **Terragrunt**, and **OpenTelemetry**.
+Full observability stack deployed on **Azure Kubernetes Service**.
+
+**Infra (Azure):** Terraform puro  
+**Apps (K8s):** Terragrunt (Helm charts)
+
+Padrão similar ao [aws/eks_rds](../aws/eks_rds/).
 
 ---
 
@@ -34,7 +39,7 @@ AKS Cluster (namespace: monitoring)
 
 ```bash
 brew install terraform terragrunt kubectl azure-cli
-az login --tenant e350a4aa-300d-4d3d-8723-9e5554b17f3a
+az login
 az account set --subscription "Azure subscription 1"
 ```
 
@@ -52,15 +57,31 @@ terraform init
 terraform apply -auto-approve
 ```
 
-### 2. Deploy the stack
+### 2. Infra Azure (AKS + PostgreSQL)
 
 ```bash
-cd deploy/environments/dev
-terragrunt run run-all plan    # Preview
-terragrunt run run-all apply   # Create everything
+cd deploy/environments/dev/tf
+terraform init
+terraform apply
 ```
 
-### 3. Access the cluster
+> AKS leva ~15 min para criar.
+
+### 3. Monitoring (Helm charts via Terragrunt)
+
+Cada componente individualmente:
+
+```bash
+cd deploy/environments/dev/monitoring/prometheus
+terragrunt run apply
+
+cd ../grafana
+terragrunt run apply
+
+# ... repeat for each component
+```
+
+### 4. Access the cluster
 
 ```bash
 az aks get-credentials --resource-group rg-observability --name aks-observability
@@ -72,9 +93,27 @@ kubectl get pods -n monitoring
 
 ## Destroy
 
+### 1. Destroy monitoring
+
 ```bash
-cd deploy/environments/dev
-terragrunt run run-all destroy
+cd deploy/environments/dev/monitoring/prometheus
+terragrunt run destroy
+
+# ... repeat for each component
+```
+
+### 2. Destroy infra Azure
+
+```bash
+cd deploy/environments/dev/tf
+terraform destroy
+```
+
+### 3. Destroy bootstrap (optional)
+
+```bash
+cd bootstrap
+terraform destroy
 ```
 
 ---
@@ -87,23 +126,32 @@ terragrunt run run-all destroy
 │   ├── aks/                 # AKS + VNet + subnets + NSG
 │   └── postgresql/          # Azure PostgreSQL Flexible Server
 ├── deploy/
-│   ├── terragrunt.hcl       # Global config (providers, remote state)
 │   └── environments/dev/
-│       ├── aks/             # AKS deployment
-│       ├── postgresql/      # PostgreSQL deployment
-│       ├── locals.tf        # Shared variables
-│       └── monitoring/      # 12 monitoring components
+│       ├── tf/              # 🟢 Infra Azure — Terraform puro (AKS + PostgreSQL)
+│       │   ├── main.tf      #   → igual aws/eks_rds/environments/dev/main.tf
+│       │   ├── variables.tf
+│       │   └── outputs.tf
+│       ├── monitoring/      # 🟡 K8s apps — Terragrunt (Helm charts)
+│       │   ├── terragrunt.hcl  # Lê outputs do tf/ para providers K8s/Helm
+│       │   ├── prometheus/
+│       │   ├── grafana/
+│       │   ├── loki/
+│       │   ├── tempo/
+│       │   └── ...
+│       └── locals.tf        # Shared variables
 ├── alerts/
-│   ├── prometheus-rules.yaml             # Pod, node, app alerts
-│   ├── prometheus-rules-postgresql.yaml  # PostgreSQL alerts
-│   └── config/alertmanager.yaml          # Email + Telegram
+│   ├── prometheus-rules.yaml
+│   ├── prometheus-rules-postgresql.yaml
+│   └── config/alertmanager.yaml
 ├── dashboards/
-│   └── postgresql-overview.json          # Grafana dashboard
+│   └── postgresql-overview.json
 ├── app-node/                # Sample Node.js app
 ├── scripts/
-│   └── generate-docs.sh     # Auto-doc generation
+│   └── generate-docs.sh
 └── README.md
 ```
+
+---
 
 ## Alerts
 
@@ -128,3 +176,7 @@ Alerts routed via **Alertmanager**:
 - **Critical**: Email + Telegram
 - **Warning**: Email only
 - **Resolved**: Notified with status
+
+---
+
+> Padrão: [aws/eks_rds](../aws/eks_rds/) — infra com Terraform puro, apps K8s com Terragrunt.
