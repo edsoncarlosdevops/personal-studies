@@ -1,0 +1,48 @@
+# Azure Pipeline for Observability Stack
+# Validates Terraform and checks AKS connectivity
+
+trigger:
+  branches:
+    include:
+      - master
+
+pool:
+  vmImage: ubuntu-latest
+
+variables:
+  azureSubscription: 'Azure subscription 1'
+  resourceGroup: 'rg-observability'
+  aksCluster: 'aks-observability'
+
+steps:
+- task: TerraformInstaller@1
+  displayName: 'Install Terraform'
+  inputs:
+    terraformVersion: 'latest'
+
+- script: |
+    cd azure/observability-stack-azure/modules/aks
+    terraform init -backend=false
+    terraform fmt -check
+    terraform validate
+  displayName: 'Validate AKS Terraform module'
+
+- script: |
+    cd azure/observability-stack-azure/deploy/environments/dev/tf
+    terraform init -backend=false
+    terraform fmt -check
+    terraform validate
+  displayName: 'Validate dev environment Terraform'
+
+- task: AzureCLI@2
+  displayName: 'Check AKS cluster status'
+  inputs:
+    azureSubscription: '$(azureSubscription)'
+    scriptType: 'bash'
+    scriptLocation: 'inlineScript'
+    inlineScript: |
+      az aks show \
+        --resource-group $(resourceGroup) \
+        --name $(aksCluster) \
+        --query "{name:name, provisioningState:provisioningState, kubernetesVersion:kubernetesVersion, nodeCount:agentPoolProfiles[0].count}" \
+        --output table
