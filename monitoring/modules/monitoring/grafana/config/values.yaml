@@ -96,6 +96,744 @@ dashboards:
   observabilidade-stack.json:
     json: |
       {
+  "dashboard": {
+    "title": "Stack de Observabilidade",
+    "tags": [
+      "observabilidade",
+      "otel",
+      "eks"
+    ],
+    "timezone": "browser",
+    "refresh": "30s",
+    "schemaVersion": 39,
+    "panels": [
+      {
+        "id": 1,
+        "title": "CPU dos Containers (top 5)",
+        "type": "timeseries",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "PBFA97CFB590B2093"
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 0
+        },
+        "targets": [
+          {
+            "expr": "topk(5, sum(rate(container_cpu_usage_seconds_total{namespace!=\"\"}[5m])) by (container, namespace))",
+            "legendFormat": "{{namespace}}/{{container}}"
+          }
+        ]
+      },
+      {
+        "id": 2,
+        "title": "Memory dos Containers (top 5)",
+        "type": "timeseries",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "PBFA97CFB590B2093"
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 0
+        },
+        "targets": [
+          {
+            "expr": "topk(5, sum(container_memory_working_set_bytes{namespace!=\"\"}) by (container, namespace))",
+            "legendFormat": "{{namespace}}/{{container}}"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "bytes"
+          }
+        }
+      },
+      {
+        "id": 3,
+        "title": "Pods por Namespace",
+        "type": "stat",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "PBFA97CFB590B2093"
+        },
+        "gridPos": {
+          "h": 4,
+          "w": 8,
+          "x": 0,
+          "y": 8
+        },
+        "targets": [
+          {
+            "expr": "count(kube_pod_status_phase{phase=\"Running\"}) by (namespace)",
+            "legendFormat": "{{namespace}}"
+          }
+        ]
+      },
+      {
+        "id": 4,
+        "title": "Nodes - CPU (%)",
+        "type": "timeseries",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "PBFA97CFB590B2093"
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 8,
+          "x": 8,
+          "y": 8
+        },
+        "targets": [
+          {
+            "expr": "100 - (avg(rate(node_cpu_seconds_total{mode=\"idle\"}[1m])) by (instance) * 100)",
+            "legendFormat": "{{instance}}"
+          }
+        ]
+      },
+      {
+        "id": 5,
+        "title": "Nodes - Memory (%)",
+        "type": "timeseries",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "PBFA97CFB590B2093"
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 8,
+          "x": 16,
+          "y": 8
+        },
+        "targets": [
+          {
+            "expr": "(1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) * 100",
+            "legendFormat": "{{instance}}"
+          }
+        ]
+      },
+      {
+        "id": 7,
+        "title": "Logs (Loki)",
+        "type": "logs",
+        "datasource": {
+          "type": "loki",
+          "uid": "P8E80F9AEF21F6940"
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 16
+        },
+        "targets": [
+          {
+            "expr": "{stream=~\".+\"}",
+            "limit": 50
+          }
+        ]
+      },
+      {
+        "id": 8,
+        "title": "Uptime dos Pods",
+        "type": "table",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "PBFA97CFB590B2093"
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 24,
+          "x": 0,
+          "y": 24
+        },
+        "targets": [
+          {
+            "expr": "time() - kube_pod_start_time",
+            "legendFormat": "{{pod}}",
+            "format": "table",
+            "instant": true
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "s",
+            "custom": {
+              "align": "left"
+            }
+          }
+        }
+      }
+    ]
+  },
+  "overwrite": true
+}
+  slo-dashboard.json:
+    json: |
+      {
+  "dashboard": {
+    "title": "SLO - Stack de Observabilidade",
+    "uid": "slo-dashboard",
+    "tags": [
+      "slo",
+      "sli",
+      "sla"
+    ],
+    "timezone": "browser",
+    "editable": true,
+    "refresh": "30s",
+    "time": {
+      "from": "now-6h",
+      "to": "now"
+    },
+    "panels": [
+      {
+        "title": "\ud83d\udcca SLI - Disponibilidade dos Servi\u00e7os",
+        "type": "gauge",
+        "gridPos": {
+          "h": 8,
+          "w": 8,
+          "x": 0,
+          "y": 0
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "PBFA97CFB590B2093"
+        },
+        "targets": [
+          {
+            "expr": "sum(kube_pod_status_ready{namespace=\"monitoring\", condition=\"true\"}) / count(kube_pod_status_ready{namespace=\"monitoring\", condition=\"true\"})",
+            "legendFormat": "Disponibilidade",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percentunit",
+            "min": 0,
+            "max": 1,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "red",
+                  "value": null
+                },
+                {
+                  "color": "red",
+                  "value": 0.95
+                },
+                {
+                  "color": "green",
+                  "value": 0.96
+                }
+              ]
+            }
+          }
+        },
+        "options": {
+          "reduceOptions": {
+            "values": false,
+            "calcs": [
+              "lastNotNull"
+            ]
+          },
+          "showThresholdLabels": true,
+          "showThresholdMarkers": true
+        }
+      },
+      {
+        "title": "\ud83d\udcca SLI - Uso de Mem\u00f3ria (%)",
+        "type": "gauge",
+        "gridPos": {
+          "h": 8,
+          "w": 8,
+          "x": 8,
+          "y": 0
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "PBFA97CFB590B2093"
+        },
+        "targets": [
+          {
+            "expr": "avg(container_memory_working_set_bytes{namespace=\"monitoring\", container!=\"\"} / on(container,pod) group_left() kube_pod_container_resource_requests{namespace=\"monitoring\", resource=\"memory\"})",
+            "legendFormat": "Mem\u00f3ria",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percentunit",
+            "min": 0,
+            "max": 1,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                },
+                {
+                  "color": "yellow",
+                  "value": 0.85
+                },
+                {
+                  "color": "red",
+                  "value": 0.95
+                }
+              ]
+            }
+          }
+        },
+        "options": {
+          "reduceOptions": {
+            "values": false,
+            "calcs": [
+              "lastNotNull"
+            ]
+          },
+          "showThresholdLabels": true,
+          "showThresholdMarkers": true
+        }
+      },
+      {
+        "title": "\ud83d\udcca SLI - Uso de CPU (%)",
+        "type": "gauge",
+        "gridPos": {
+          "h": 8,
+          "w": 8,
+          "x": 16,
+          "y": 0
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "PBFA97CFB590B2093"
+        },
+        "targets": [
+          {
+            "expr": "avg(rate(container_cpu_usage_seconds_total{namespace=\"monitoring\", container!=\"\"}[5m]) / on(container,pod) group_left() kube_pod_container_resource_requests{namespace=\"monitoring\", resource=\"cpu\"})",
+            "legendFormat": "CPU",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percentunit",
+            "min": 0,
+            "max": 1,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                },
+                {
+                  "color": "yellow",
+                  "value": 0.85
+                },
+                {
+                  "color": "red",
+                  "value": 0.95
+                }
+              ]
+            }
+          }
+        },
+        "options": {
+          "reduceOptions": {
+            "values": false,
+            "calcs": [
+              "lastNotNull"
+            ]
+          },
+          "showThresholdLabels": true,
+          "showThresholdMarkers": true
+        }
+      },
+      {
+        "title": "\ud83d\udcc8 SLI - Disponibilidade (hist\u00f3rico)",
+        "type": "timeseries",
+        "gridPos": {
+          "h": 8,
+          "w": 8,
+          "x": 0,
+          "y": 8
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "PBFA97CFB590B2093"
+        },
+        "targets": [
+          {
+            "expr": "sum(kube_pod_status_ready{namespace=\"monitoring\", condition=\"true\"}) / count(kube_pod_status_ready{namespace=\"monitoring\", condition=\"true\"})",
+            "legendFormat": "Disponibilidade",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percentunit",
+            "min": 0,
+            "max": 1,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                },
+                {
+                  "color": "red",
+                  "value": 0.95
+                }
+              ]
+            }
+          }
+        }
+      },
+      {
+        "title": "\ud83d\udcc8 SLI - Mem\u00f3ria (hist\u00f3rico)",
+        "type": "timeseries",
+        "gridPos": {
+          "h": 8,
+          "w": 8,
+          "x": 8,
+          "y": 8
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "PBFA97CFB590B2093"
+        },
+        "targets": [
+          {
+            "expr": "avg(container_memory_working_set_bytes{namespace=\"monitoring\"} / on(container,pod) group_left() kube_pod_container_resource_requests{namespace=\"monitoring\", resource=\"memory\"})",
+            "legendFormat": "Mem\u00f3ria",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percentunit",
+            "min": 0,
+            "max": 1,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                },
+                {
+                  "color": "yellow",
+                  "value": 0.85
+                },
+                {
+                  "color": "red",
+                  "value": 0.95
+                }
+              ]
+            }
+          }
+        }
+      },
+      {
+        "title": "\ud83d\udcc8 SLI - CPU (hist\u00f3rico)",
+        "type": "timeseries",
+        "gridPos": {
+          "h": 8,
+          "w": 8,
+          "x": 16,
+          "y": 8
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "PBFA97CFB590B2093"
+        },
+        "targets": [
+          {
+            "expr": "avg(rate(container_cpu_usage_seconds_total{namespace=\"monitoring\", container!=\"\"}[5m]) / on(container,pod) group_left() kube_pod_container_resource_requests{namespace=\"monitoring\", resource=\"cpu\"})",
+            "legendFormat": "CPU",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percentunit",
+            "min": 0,
+            "max": 1,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                },
+                {
+                  "color": "yellow",
+                  "value": 0.85
+                },
+                {
+                  "color": "red",
+                  "value": 0.95
+                }
+              ]
+            }
+          }
+        }
+      },
+      {
+        "title": "\ud83d\udccb SLA - \u00daltimos Alertas SLO",
+        "type": "table",
+        "gridPos": {
+          "h": 8,
+          "w": 24,
+          "x": 0,
+          "y": 16
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "PBFA97CFB590B2093"
+        },
+        "targets": [
+          {
+            "expr": "ALERTS{alertname=~\"SLO_.*\"}",
+            "legendFormat": "{{alertname}}",
+            "format": "table",
+            "instant": true,
+            "refId": "A"
+          }
+        ],
+        "transformations": [
+          {
+            "id": "organize",
+            "options": {
+              "excludeByName": {},
+              "indexByName": {},
+              "renameByName": {
+                "alertname": "Alerta",
+                "alertstate": "Estado",
+                "severity": "Severidade"
+              }
+            }
+          }
+        ]
+      },
+      {
+        "title": "\ud83d\udcca Disponibilidade",
+        "type": "stat",
+        "gridPos": {
+          "h": 6,
+          "w": 8,
+          "x": 0,
+          "y": 24
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "PBFA97CFB590B2093"
+        },
+        "targets": [
+          {
+            "expr": "avg(kube_pod_status_ready{namespace=\"monitoring\", condition=\"true\"})",
+            "legendFormat": "",
+            "refId": "A"
+          }
+        ],
+        "description": "\ud83d\udd0d SLI: % de pods prontos\n\ud83c\udfaf SLO: > 95%\n\ud83d\udccb SLA: Alerta CRITICAL se violar",
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percentunit",
+            "min": 0,
+            "max": 1,
+            "decimals": 1,
+            "color": {
+              "mode": "thresholds"
+            },
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "#F2495C",
+                  "value": null
+                },
+                {
+                  "color": "#F2495C",
+                  "value": 0.95
+                },
+                {
+                  "color": "#73BF69",
+                  "value": 0.96
+                }
+              ]
+            }
+          }
+        },
+        "options": {
+          "colorMode": "background",
+          "graphMode": "area",
+          "justifyMode": "auto",
+          "orientation": "horizontal",
+          "reduceOptions": {
+            "values": false,
+            "calcs": [
+              "lastNotNull"
+            ]
+          },
+          "textMode": "auto"
+        }
+      },
+      {
+        "title": "\ud83d\udcbe Mem\u00f3ria",
+        "type": "stat",
+        "gridPos": {
+          "h": 6,
+          "w": 8,
+          "x": 8,
+          "y": 24
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "PBFA97CFB590B2093"
+        },
+        "targets": [
+          {
+            "expr": "avg(container_memory_working_set_bytes{namespace=\"monitoring\", container!=\"\"} / on(container,pod) group_left() kube_pod_container_resource_requests{namespace=\"monitoring\", resource=\"memory\"})",
+            "legendFormat": "",
+            "refId": "A"
+          }
+        ],
+        "description": "\ud83d\udd0d SLI: % de memoria usada / request\n\ud83c\udfaf SLO: < 85%\n\ud83d\udccb SLA: Alerta WARNING se > 85%",
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percentunit",
+            "min": 0,
+            "max": 1,
+            "decimals": 1,
+            "color": {
+              "mode": "thresholds"
+            },
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "#73BF69",
+                  "value": null
+                },
+                {
+                  "color": "#FF9830",
+                  "value": 0.85
+                },
+                {
+                  "color": "#F2495C",
+                  "value": 0.95
+                }
+              ]
+            }
+          }
+        },
+        "options": {
+          "colorMode": "background",
+          "graphMode": "area",
+          "justifyMode": "auto",
+          "orientation": "horizontal",
+          "reduceOptions": {
+            "values": false,
+            "calcs": [
+              "lastNotNull"
+            ]
+          },
+          "textMode": "auto"
+        }
+      },
+      {
+        "title": "\u26a1 CPU",
+        "type": "stat",
+        "gridPos": {
+          "h": 6,
+          "w": 8,
+          "x": 16,
+          "y": 24
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "PBFA97CFB590B2093"
+        },
+        "targets": [
+          {
+            "expr": "avg(rate(container_cpu_usage_seconds_total{namespace=\"monitoring\", container!=\"\"}[5m]) / on(container,pod) group_left() kube_pod_container_resource_requests{namespace=\"monitoring\", resource=\"cpu\"})",
+            "legendFormat": "",
+            "refId": "A"
+          }
+        ],
+        "description": "\ud83d\udd0d SLI: % de CPU usada / request\n\ud83c\udfaf SLO: < 85%\n\ud83d\udccb SLA: Alerta WARNING se > 85%",
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percentunit",
+            "min": 0,
+            "max": 1,
+            "decimals": 1,
+            "color": {
+              "mode": "thresholds"
+            },
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "#73BF69",
+                  "value": null
+                },
+                {
+                  "color": "#FF9830",
+                  "value": 0.85
+                },
+                {
+                  "color": "#F2495C",
+                  "value": 0.95
+                }
+              ]
+            }
+          }
+        },
+        "options": {
+          "colorMode": "background",
+          "graphMode": "area",
+          "justifyMode": "auto",
+          "orientation": "horizontal",
+          "reduceOptions": {
+            "values": false,
+            "calcs": [
+              "lastNotNull"
+            ]
+          },
+          "textMode": "auto"
+        }
+      },
+      {
+        "title": "\ud83d\udccb SLI / SLO / SLA - \u00cdndices de Qualidade",
+        "type": "text",
+        "gridPos": {
+          "h": 8,
+          "w": 24,
+          "x": 0,
+          "y": 30
+        },
+        "options": {
+          "content": "\n### \ud83d\udcca Vis\u00e3o Geral dos Indicadores\n\n| Indicador | SLI (Valor Atual) | SLO (Meta) | SLA (A\u00e7\u00e3o) | Status |\n|-----------|:-----------------:|:----------:|:----------:|:------:|\n| **\ud83d\udcca Disponibilidade** | **92.0%** | > 95% | \ud83d\udd34 Alerta **CRITICAL** | \ud83d\udd34 Abaixo |\n| **\ud83d\udcbe Mem\u00f3ria** | **70.6%** | < 85% | \ud83d\udfe1 Alerta **WARNING** | \ud83d\udfe2 OK |\n| **\u26a1 CPU** | **11.6%** | < 85% | \ud83d\udfe1 Alerta **WARNING** | \ud83d\udfe2 OK |\n\n---\n\n### \ud83d\udd0d O que significa cada sigla?\n\n| Sigla | Significado | Exemplo |\n|-------|-------------|---------|\n| **SLI** | **S**ervice **L**evel **I**ndicator *(O que medimos)* | % de pods prontos, % de mem\u00f3ria usada |\n| **SLO** | **S**ervice **L**evel **O**bjective *(A meta que queremos)* | Disponibilidade deve ser > 95% |\n| **SLA** | **S**ervice **L**evel **A**greement *(O que fazer se violar)* | Notificar time se ficar abaixo de 95% |\n\n---\n\n### \ud83d\udcc8 Metas de Refer\u00eancia\n\n| Ambiente | Disponibilidade | Mem\u00f3ria | CPU | Downtime aceit\u00e1vel/ano |\n|----------|:--------------:|:-------:|:---:|:---------------------:|\n| \ud83e\uddea **Dev / Lab** | > 95% | < 85% | < 85% | ~18 dias |\n| \ud83c\udfe2 **Produ\u00e7\u00e3o** | > 99.5% | < 75% | < 75% | ~1 dia |\n| \ud83c\udfe6 **Miss\u00e3o Cr\u00edtica** | > 99.99% | < 60% | < 60% | ~52 minutos |\n\n---\n\n### \ud83d\udea8 O que fazer em cada situa\u00e7\u00e3o\n\n| Situa\u00e7\u00e3o | A\u00e7\u00e3o |\n|----------|------|\n| \ud83d\udfe2 **Verde** (dentro do SLO) | Nada, est\u00e1 saud\u00e1vel |\n| \ud83d\udfe1 **Amarelo** (> 85% CPU/Mem\u00f3ria) | Avaliar se precisa aumentar `resources.requests` |\n| \ud83d\udd34 **Disponibilidade < 95%** | Verificar pods com CrashLoopBackOff, ImagePullBackOff |\n| \ud83d\udd34 **Mem\u00f3ria > 100%** | Pod foi morto por OOMKill! **URGENTE** |\n| \ud83d\udd34 **CPU > 100%** | Pod est\u00e1 sendo throttled! **URGENTE** |\n\n> \ud83d\udca1 **Dica:** Quanto maior o SLO, mais caro e complexo de manter. \n> 99.9% exige arquitetura redundante, 99.99% exige multi-regi\u00e3o.\n        ",
+          "mode": "markdown"
+        }
+      }
+    ]
+  },
+  "overwrite": true,
+  "folderUid": "slo-folder"
+}
+      {
           "dashboard": {
               "title": "Stack de Observabilidade",
               "tags": [
