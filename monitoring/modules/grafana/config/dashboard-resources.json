@@ -1,0 +1,166 @@
+{
+  "dashboard": {
+    "title": "Recursos por Namespace (Requests vs Limits)",
+    "uid": "resources-dashboard",
+    "tags": [
+      "observabilidade",
+      "recursos",
+      "capacity",
+      "requests-limits"
+    ],
+    "timezone": "browser",
+    "refresh": "30s",
+    "schemaVersion": 39,
+    "panels": [
+      {
+        "id": 1,
+        "title": "CPU - Requests vs Limits por Namespace",
+        "type": "barchart",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "PBFA97CFB590B2093"
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 0
+        },
+        "targets": [
+          {
+            "expr": "sum(kube_pod_container_resource_requests{resource=\"cpu\"}) by (namespace)",
+            "legendFormat": "requests - {{namespace}}"
+          },
+          {
+            "expr": "sum(kube_pod_container_resource_limits{resource=\"cpu\"}) by (namespace)",
+            "legendFormat": "limits - {{namespace}}"
+          },
+          {
+            "expr": "sum by (namespace) (rate(container_cpu_usage_seconds_total{namespace!=\"\"}[5m]))",
+            "legendFormat": "uso - {{namespace}}"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "cores",
+            "custom": {
+              "stacking": {
+                "mode": "none"
+              }
+            }
+          }
+        }
+      },
+      {
+        "id": 2,
+        "title": "Memoria - Requests vs Limits por Namespace",
+        "type": "barchart",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "PBFA97CFB590B2093"
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 0
+        },
+        "targets": [
+          {
+            "expr": "sum(kube_pod_container_resource_requests{resource=\"memory\"}) by (namespace)",
+            "legendFormat": "requests - {{namespace}}"
+          },
+          {
+            "expr": "sum(kube_pod_container_resource_limits{resource=\"memory\"}) by (namespace)",
+            "legendFormat": "limits - {{namespace}}"
+          },
+          {
+            "expr": "sum by (namespace) (container_memory_working_set_bytes{namespace!=\"\"})",
+            "legendFormat": "uso - {{namespace}}"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "bytes",
+            "custom": {
+              "stacking": {
+                "mode": "none"
+              }
+            }
+          }
+        }
+      },
+      {
+        "id": 3,
+        "title": "Uso vs Request (%) por Namespace",
+        "type": "timeseries",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "PBFA97CFB590B2093"
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 24,
+          "x": 0,
+          "y": 8
+        },
+        "targets": [
+          {
+            "expr": "sum(rate(container_cpu_usage_seconds_total{namespace!=\"\"}[5m])) by (namespace) / sum(kube_pod_container_resource_requests{resource=\"cpu\"}) by (namespace)",
+            "legendFormat": "CPU - {{namespace}}"
+          },
+          {
+            "expr": "sum(container_memory_working_set_bytes{namespace!=\"\"}) by (namespace) / sum(kube_pod_container_resource_requests{resource=\"memory\"}) by (namespace)",
+            "legendFormat": "MEM - {{namespace}}"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percentunit"
+          }
+        }
+      },
+      {
+        "id": 4,
+        "title": "Pods sem Limits (CPU)",
+        "type": "stat",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "PBFA97CFB590B2093"
+        },
+        "gridPos": {
+          "h": 6,
+          "w": 6,
+          "x": 0,
+          "y": 16
+        },
+        "targets": [
+          {
+            "expr": "count(kube_pod_container_resource_limits{resource=\"cpu\"} == 0) by (namespace)",
+            "legendFormat": "{{namespace}}"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": 0
+                },
+                {
+                  "color": "red",
+                  "value": 1
+                }
+              ]
+            }
+          }
+        }
+      }
+    ]
+  }
+}

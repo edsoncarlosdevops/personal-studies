@@ -1,0 +1,206 @@
+{
+  "dashboard": {
+    "title": "Estado dos Deployments",
+    "uid": "deployments-dashboard",
+    "tags": [
+      "observabilidade",
+      "deployments",
+      "k8s",
+      "health"
+    ],
+    "timezone": "browser",
+    "refresh": "30s",
+    "schemaVersion": 39,
+    "panels": [
+      {
+        "id": 1,
+        "title": "Replicas Desejadas vs Disponiveis por Deployment",
+        "type": "barchart",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "PBFA97CFB590B2093"
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 0
+        },
+        "targets": [
+          {
+            "expr": "kube_deployment_spec_replicas",
+            "legendFormat": "desejado - {{namespace}}/{{deployment}}"
+          },
+          {
+            "expr": "kube_deployment_status_replicas_available",
+            "legendFormat": "disponivel - {{namespace}}/{{deployment}}"
+          },
+          {
+            "expr": "kube_deployment_status_replicas_unavailable",
+            "legendFormat": "indisponivel - {{namespace}}/{{deployment}}"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "short",
+            "custom": {
+              "stacking": {
+                "mode": "none"
+              }
+            }
+          }
+        }
+      },
+      {
+        "id": 2,
+        "title": "Pods com Problemas",
+        "type": "table",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "PBFA97CFB590B2093"
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 0
+        },
+        "targets": [
+          {
+            "expr": "kube_pod_status_phase{phase!=\"Running\"}",
+            "legendFormat": "{{namespace}}/{{pod}} - {{phase}}",
+            "format": "table",
+            "instant": true
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "custom": {
+              "align": "left"
+            }
+          },
+          "overrides": [
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "phase"
+              },
+              "properties": [
+                {
+                  "id": "color",
+                  "value": {
+                    "mode": "thresholds",
+                    "thresholds": {
+                      "steps": [
+                        {
+                          "color": "red",
+                          "value": 0
+                        },
+                        {
+                          "color": "orange",
+                          "value": 1
+                        },
+                        {
+                          "color": "green",
+                          "value": 2
+                        }
+                      ]
+                    }
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "id": 3,
+        "title": "Restarts por Pod (ultimas 24h)",
+        "type": "barchart",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "PBFA97CFB590B2093"
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 8
+        },
+        "targets": [
+          {
+            "expr": "topk(20, increase(kube_pod_container_status_restarts_total[24h]))",
+            "legendFormat": "{{namespace}}/{{pod}}"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "short",
+            "color": {
+              "mode": "thresholds"
+            },
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": 0
+                },
+                {
+                  "color": "orange",
+                  "value": 3
+                },
+                {
+                  "color": "red",
+                  "value": 10
+                }
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 4,
+        "title": "Deployments com Replicas Indisponiveis",
+        "type": "stat",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "PBFA97CFB590B2093"
+        },
+        "gridPos": {
+          "h": 6,
+          "w": 12,
+          "x": 12,
+          "y": 8
+        },
+        "targets": [
+          {
+            "expr": "count(kube_deployment_status_replicas_unavailable > 0) by (namespace)",
+            "legendFormat": "{{namespace}}"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "short",
+            "color": {
+              "mode": "thresholds"
+            },
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": 0
+                },
+                {
+                  "color": "red",
+                  "value": 1
+                }
+              ]
+            }
+          }
+        }
+      }
+    ]
+  }
+}
