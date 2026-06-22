@@ -9,10 +9,10 @@
     "slug": "loki-chunks",
     "url": "/d/chunks/loki-chunks",
     "expires": "0001-01-01T00:00:00Z",
-    "created": "2026-06-22T14:28:54Z",
-    "updated": "2026-06-22T14:28:54Z",
-    "updatedBy": "Anonymous",
-    "createdBy": "Anonymous",
+    "created": "2026-06-22T14:57:58Z",
+    "updated": "2026-06-22T14:57:58Z",
+    "updatedBy": "admin",
+    "createdBy": "admin",
     "version": 1,
     "hasAcl": false,
     "isFolder": false,
@@ -20,8 +20,8 @@
     "folderUid": "",
     "folderTitle": "General",
     "folderUrl": "",
-    "provisioned": true,
-    "provisionedExternalId": "loki-chunks.json",
+    "provisioned": false,
+    "provisionedExternalId": "",
     "annotationsPermissions": {
       "dashboard": {
         "canAdd": true,
@@ -43,7 +43,7 @@
     "gnetId": null,
     "graphTooltip": 0,
     "hideControls": false,
-    "id": 5,
+    "id": 15,
     "links": [
       {
         "asDropdown": true,
@@ -1281,6 +1281,7 @@
             "text": "default",
             "value": "default"
           },
+          "default": "Loki",
           "hide": 0,
           "label": "Data Source",
           "name": "datasource",
@@ -1288,8 +1289,7 @@
           "query": "loki",
           "refresh": 1,
           "regex": "",
-          "type": "datasource",
-          "default": "Loki"
+          "type": "datasource"
         },
         {
           "allValue": null,
@@ -1304,14 +1304,13 @@
           "multi": false,
           "name": "cluster",
           "options": [],
-          "query": "label_values(loki_build_info, cluster)",
+          "query": "monitoring",
           "refresh": 1,
-          "regex": "",
           "sort": 2,
           "tagValuesQuery": "",
           "tags": [],
           "tagsQuery": "",
-          "type": "query",
+          "type": "custom",
           "useTags": false
         },
         {
@@ -1327,7 +1326,7 @@
           "multi": false,
           "name": "namespace",
           "options": [],
-          "query": "label_values(loki_build_info{cluster=~\"$cluster\"}, namespace)",
+          "query": "label_values(kube_namespace_created, namespace)",
           "refresh": 1,
           "regex": "",
           "sort": 2,
