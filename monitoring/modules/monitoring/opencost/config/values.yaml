@@ -3,12 +3,52 @@
 # OpenCost calcula o custo de cada workload no cluster baseado
 # no consumo de CPU, memoria, storage e trafego de rede.
 #
-# Ele consulta o Prometheus para obter metricas de utilizacao
-# de recursos e os precos da AWS para calcular os custos.
-#
 # Fluxo:
 #   OpenCost -> Prometheus (:80) -> metricas de pods/nodes
 #   OpenCost -> UI / API (:9003) -> visualizacao no Grafana
+# =====================================================================
+#
+# CONFIGURACAO DE PRECOS (PRICING)
+# =====================================================================
+# O OpenCost obtem precos de 3 formas (em ordem de prioridade):
+#
+# 1. PRICING AUTOMATICO via API do Cloud Provider (recomendado):
+#
+#    AZURE (configurado neste projeto):
+#      Preencha as variaveis opencost_azure_* no terragrunt.hcl com as
+#      credenciais de um Service Principal. O OpenCost consultara a
+#      Azure Retail Rates API automaticamente para obter precos reais.
+#
+#      Requisitos:
+#      - Service Principal com permissao "Reader" na subscription
+#      - Provider "Microsoft.Pricing" registrado na subscription
+#        (az provider register --namespace Microsoft.Pricing)
+#
+#      Criar Service Principal:
+#        az ad sp create-for-rbac \
+#          --name "opencost-pricing" \
+#          --role "Reader" \
+#          --scope "/subscriptions/<SUBSCRIPTION_ID>"
+#
+#    AWS (comentado - referência):
+#      O OpenCost detecta automaticamente quando roda em EC2/EKS.
+#      Usa a AWS Pricing API com as credenciais IAM da instancia/node.
+#      Nao requer configuracao adicional, apenas permissoes IAM:
+#      - AmazonEC2ReadOnlyAccess
+#      - AWSPriceListServiceFullAccess
+#
+#    GCP (comentado - referência):
+#      O OpenCost detecta automaticamente quando roda em GKE.
+#      Usa a Google Cloud Billing API com a Service Account do node.
+#      Nao requer configuracao adicional, apenas escopos:
+#      - https://www.googleapis.com/auth/cloud-platform
+#
+# 2. PRICING CUSTOMIZADO (fallback):
+#    Variaveis de ambiente: CPU_COST_PER_HOUR, RAM_COST_PER_GB_HOUR, etc.
+#    Usado quando nao ha acesso a API de nuvem (on-premises, local, etc).
+#
+# 3. PRICING DEFAULT (resulta em $0):
+#    Se nada for configurado, usa precos fixos internos do OpenCost.
 # =====================================================================
 
 opencost:
@@ -16,13 +56,10 @@ opencost:
     defaultClusterId: ${opencost_cluster_id}
 
   prometheus:
-    # URL interna do Prometheus Server no cluster
     internal:
       serviceName: prometheus-server
       namespaceName: monitoring
       port: 80
 
   metrics:
-    # A cada 30s o OpenCost coleta dados de utilizacao do Prometheus
     scrapeInterval: 30s
-
