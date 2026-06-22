@@ -1,6 +1,7 @@
 # Grafana - Configuration System
 # =====================================================================
 # Grafana e a camada de visualizacao da stack de observabilidade.
+# Conecta-se a Prometheus, Loki e Tempo como datasources.
 # =====================================================================
 replicaCount: ${grafana_replica_count}
 
@@ -55,12 +56,39 @@ datasources:
           handleAlertManagerManually: true
           implementation: prometheus
 
-# Sidecar para dashboards
-# Copia automaticamente ConfigMaps com label grafana_dashboard=1
+dashboardProviders:
+  dashboardproviders.yaml:
+    apiVersion: 1
+    providers:
+      - name: default
+        orgId: 1
+        folder: ""
+        type: file
+        disableDeletion: false
+        editable: true
+        options:
+          path: /var/lib/grafana/dashboards
+
+# Sidecar para dashboards (DESATIVADO)
+# =====================================================================
+# O Helm Chart do Grafana oferece um sidecar (kiwigrid/k8s-sidecar)
+# que observa ConfigMaps com label grafana_dashboard=1 e copia
+# automaticamente os dashboards para dentro do pod.
+#
+# Motivo da desativacao:
+# 1. O sidecar sobrescreve dashboards importados via API REST,
+#    impedindo correcoes pontuais (ex: ajuste de datasource).
+# 2. Causa o erro "Cannot save provisioned dashboard" ao tentar
+#    atualizar via API, pois ele recria o dashboard original.
+# 3. Adiciona complexidade desnecessaria: um container extra,
+#    watch de ConfigMaps, e conflitos de versao.
+#
+# Abordagem atual:
+# - Dashboards sao versionados como arquivos JSON em config/
+# - Importados via API REST (curl POST /api/dashboards/db)
+# - O ConfigMap grafana-dashboards serve como fonte de verdade
+#   para reconstrucao, mas a importacao e feita sob demanda
+# =====================================================================
 sidecar:
   dashboards:
-    enabled: true
-    label: grafana_dashboard
-    folder: /tmp/dashboards
-    defaultFolderName: null
-    resource: configmap
+    enabled: false
