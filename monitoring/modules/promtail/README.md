@@ -56,7 +56,7 @@ kubectl get secrets -n monitoring | grep 'sh.helm' | awk '{print $1}' | xargs ku
 helm upgrade --install promtail grafana/promtail \
   --namespace monitoring \
   --version 6.16.6 \
-  -f monitoring/modules/monitoring/promtail/config/values.yaml
+  -f monitoring/modules/observability/promtail/config/values.yaml
 ```
 
 ## Arquivos do modulo

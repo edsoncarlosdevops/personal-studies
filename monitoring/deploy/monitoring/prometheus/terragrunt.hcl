@@ -1,6 +1,6 @@
 terraform {
   # Aponta para a pasta modules que criamos acima
-  source = "../../../modules/monitoring/prometheus"
+  source = "../../../modules/prometheus"
 }
 
 include {

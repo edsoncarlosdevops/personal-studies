@@ -1,5 +1,5 @@
 terraform {
-  source = "../../../../../monitoring/modules/monitoring/opentelemetry-collector"
+  source = "../../../../../monitoring/modules/observability/opentelemetry-collector"
 }
 
 include {

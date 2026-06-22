@@ -1,5 +1,5 @@
 terraform {
-  source = "../../../../../monitoring/modules/monitoring/namespace"
+  source = "../../../../../monitoring/modules/observability/namespace"
 }
 
 include {

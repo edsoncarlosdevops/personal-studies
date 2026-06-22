@@ -20,7 +20,7 @@ for module in modules/aks modules/postgresql; do
   generate "$DOCS_DIR/$module"
 done
 
-for module in modules/monitoring/*/; do
+for module in modules/*/; do
   generate "$DOCS_DIR/$module"
 done
 

@@ -157,7 +157,7 @@ Modules affected: `grafana`, `opentelemetry-collector`, `opentelemetry-operator`
 All Terragrunt modules use the same relative path pattern:
 
 ```hcl
-source = "../../../../../../../monitoring/modules/monitoring/<component>"
+source = "../../../../../../../monitoring/modules/observability/<component>"
 ```
 
 The depth (6 levels) matches the directory structure: `deploy/environments/dev/monitoring/<component>` to the root, then into the external `monitoring` repo.

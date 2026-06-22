@@ -2,7 +2,7 @@
 
 terraform {
   # Aponta para a pasta modules que criamos no Passo 1
-  source = "../../../modules/monitoring/grafana"
+  source = "../../../modules/grafana"
 }
 
 include {

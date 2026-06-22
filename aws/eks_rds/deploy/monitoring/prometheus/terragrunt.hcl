@@ -1,5 +1,5 @@
 terraform {
-  source = "../../../../../monitoring/modules/monitoring/prometheus"
+  source = "../../../../../monitoring/modules/observability/prometheus"
 }
 
 include {

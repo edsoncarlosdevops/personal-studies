@@ -6,7 +6,7 @@
 #
 # Pre-requisito: O recurso Instrumentation (python-instrumentation)
 # precisa existir no mesmo namespace. Ele e gerenciado pelo modulo:
-#   monitoring/modules/monitoring/opentelemetry-operator/config/
+#   monitoring/modules/observability/opentelemetry-operator/config/
 #
 # Annotation chave:
 #   instrumentation.opentelemetry.io/inject-python: "true"

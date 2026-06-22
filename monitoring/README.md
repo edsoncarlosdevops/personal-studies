@@ -264,7 +264,7 @@ kubectl scale deployment -n monitoring app-python-auto --replicas=1
 
 ### SLOs configurados
 
-Regras de alerta definidas em `modules/monitoring/prometheus/config/values.yaml` (grupo `slo`):
+Regras de alerta definidas em `modules/prometheus/config/values.yaml` (grupo `slo`):
 
 | SLO | SLI (métrica) | Meta | Severidade | Janela |
 |-----|--------------|------|------------|--------|

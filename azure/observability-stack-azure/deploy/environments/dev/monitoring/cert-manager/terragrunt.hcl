@@ -1,5 +1,5 @@
 terraform {
-  source = "../../../../../../../monitoring/modules/monitoring/cert-manager"
+  source = "../../../../../../../monitoring/modules/observability/cert-manager"
 }
 
 include "root" {

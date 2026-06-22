@@ -1,5 +1,5 @@
 terraform {
-  source = "../../../../../../../monitoring/modules/monitoring/grafana"
+  source = "../../../../../../../monitoring/modules/observability/grafana"
 }
 
 include "root" {
