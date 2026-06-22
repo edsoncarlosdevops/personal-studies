@@ -1,172 +1,281 @@
-# Prometheus
+# Prometheus — Guia de Domínio
 
-## Visao Geral
+> O que você precisa saber para configurar, otimizar e depurar o Prometheus como um expert.
 
-Prometheus coleta metricas de alvos configurados em intervalos regulares, avalia regras de alerta e exibe resultados.
+## Sumário
 
-## O que ele faz no projeto
+- [Coleta e Descoberta](#coleta-e-descoberta)
+- [Storage e Performance](#storage-e-performance)
+- [Alerting e Recording Rules](#alerting-e-recording-rules)
+- [PromQL Essencial](#promql-essencial)
+- [Depuração](#depuração)
+- [Cardinalidade](#cardinalidade)
 
-O Prometheus e o backbone de metricas do cluster. Ele:
+---
 
-1. **Coleta metricas** do OTEL Collector (porta 8889)
-2. **Coleta metricas** dele mesmo (localhost:9090)
-3. **Armazena** (sem persistencia em lab)
-4. **Expoe** dados para o Grafana via datasource
+## Coleta e Descoberta
 
-## Arquitetura do Scraping
+### ServiceMonitor vs PodMonitor vs Probe
 
-```
-App (OTel SDK) ---> OTEL Collector (:4317)
-                              |
-                    +---------+---------+
-                    |                   |
-              :8889 (export)     :4317 (Tempo)
-                    |                   |
-              Prometheus           Tempo
-                    |                   |
-              Grafana (query)     Grafana (query)
-```
+| Tipo | Quando usar |
+|------|-------------|
+| **ServiceMonitor** | Serviço com `spec.selector` + porta nomeada (recomendado) |
+| **PodMonitor** | Quando não há Service (ex: cAdvisor, node-exporter via DaemonSet) |
+| **Probe** | Monitoramento externo (HTTP, TCP, ICMP) |
 
-## [ATENCAO] Scrape Configs
-
-O Prometheus so raspa targets listados em `extraScrapeConfigs`.
-Sem o target do OTEL Collector, metricas como `http_requests_total`
-nunca aparecem nas queries.
+### relabel_configs — os 5 que você precisa saber
 
 ```yaml
-extraScrapeConfigs: |
-  - job_name: opentelemetry-collector
-    scrape_interval: 15s
-    static_configs:
-      - targets:
-        - opentelemetry-collector.monitoring.svc.cluster.local:8889
+relabel_configs:
+  # 1. Dropar métricas que não interessam
+  - source_labels: [__name__]
+    regex: 'etcd_(.*)'
+    action: drop
+
+  # 2. Renomear label
+  - source_labels: [__meta_kubernetes_pod_label_app]
+    target_label: app
+    action: replace
+
+  # 3. Criar label a partir de metadados
+  - source_labels: [__meta_kubernetes_namespace]
+    target_label: namespace
+    action: replace
+
+  # 4. Manter apenas targets com label específica
+  - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+    regex: 'true'
+    action: keep
+
+  # 5. Mapear porta correta
+  - source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
+    regex: '([^:]+)(?::\d+)?;(\d+)'
+    replacement: '$1:$2'
+    target_label: __address__
+    action: replace
 ```
 
-## Queries  Uteis (PromQL)
+### honor_labels
 
-### Saude do Cluster
+```yaml
+# Quando o exportador já envia labels que você quer preservar
+honor_labels: true   # não sobrescreve labels do target
+honor_labels: false  # renomeia para exported_*
+```
+
+### scrape_interval e scrape_timeout
+
+```yaml
+# Configure por job, não global
+scrape_configs:
+  - job_name: 'cadvisor'
+    scrape_interval: 15s   # padrão 60s é muito espaçado
+    scrape_timeout: 10s    # sempre menor que scrape_interval
+```
+
+---
+
+## Storage e Performance
+
+### TSDB Internals
+
+```
+WAL (Write-Ahead Log) → Head (in-memory) → Blocks (on-disk)
+```
+
+- **WAL**: dados recentes (2h), seguro contra crash
+- **Head**: dados em memória, consultas rápidas
+- **Blocks**: compactados em disco, intervalos de 2h
+- **Compaction**: junta blocks menores em maiores (reduz IO)
+
+### Configuração Essencial
+
+```yaml
+storage:
+  tsdb:
+    retention:
+      time: 30d        # quanto tempo manter
+      size: 50GB       # limite de disco (opcional)
+    wal_compression: true  # reduz IO de escrita
+```
+
+### Query Optimization
 
 ```promql
-# Quais targets estao respondendo
-up
+# ❌ Ruim — varre tudo
+rate(container_cpu_usage_seconds_total[5m])
 
-# % de targets UP
-(count(up == 1) / count(up)) * 100
+# ✅ Bom — filtra antes
+rate(container_cpu_usage_seconds_total{namespace="monitoring"}[5m])
+
+# ❌ Ruim — cardinalidade explode
+count({__name__=~".*"}) by (instance, job, namespace, pod, container)
+
+# ✅ Bom — específico
+count(kube_pod_info) by (namespace)
 ```
 
-### Metricas do OTEL Collector
+### Quando usar rate vs increase
+
+| Função | Retorna | Uso |
+|--------|---------|-----|
+| `rate(metric[5m])` | Taxa por segundo | CPU, requests/s, throughput |
+| `increase(metric[5m])` | Valor total no período | Restarts, errors absolutos |
+| `irate(metric[5m])` | Taxa instantânea | Picos rápidos (últimos 2 pontos) |
+
+---
+
+## Alerting e Recording Rules
+
+### Estrutura de Regras
+
+```yaml
+groups:
+  - name: observabilidade
+    interval: 30s  # avalia a cada 30s (padrão 60s)
+    rules:
+      - record: namespace:cpu_usage:rate5m
+        expr: |
+          sum(rate(container_cpu_usage_seconds_total{namespace!=""}[5m])) by (namespace)
+
+      - alert: HighCPUUsage
+        expr: |
+          namespace:cpu_usage:rate5m > 0.8
+        for: 10m          # só dispara se sustentar por 10 min
+        labels:
+          severity: warning
+        annotations:
+          summary: '{{ $labels.namespace }} com CPU alta ({{ $value | humanizePercentage }})'
+```
+
+### Evitando Falso Positivo
 
 ```promql
-# Spans recebidos por segundo (taxa)
-rate(otelcol_receiver_accepted_spans[1m])
+# ❌ Dispara em pico de 1 minuto
+rate(metric[1m]) > 0.9
 
-# Spans com erro
-rate(otelcol_receiver_refused_spans[1m])
-
-# Memoria do Collector
-otelcol_process_memory_rss
+# ✅ Só dispara se médio sustentado
+avg_over_time(rate(metric[5m])[15m:1m]) > 0.9
 ```
 
-### Metricas Customizadas (via SDK OTel)
+---
+
+## PromQL Essencial
+
+### 4 Funções que Você TEM que Saber
 
 ```promql
-# Total de requisicoes HTTP
-http_requests_total
-
-# Requisicoes por rota
-sum by(route) (http_requests_total)
-
-# Requisicoes por metodo
-sum by(method) (http_requests_total)
-
-# Total de requisicoes (contador acumulado)
-sum(http_requests_total)
-
-# Requisicoes por segundo
-rate(http_requests_total[1m])
-
-# Requisicoes por segundo por rota
-sum by(route) (rate(http_requests_total[1m]))
-
-# Top 5 rotas mais chamadas
-topk(5, sum by(route) (rate(http_requests_total[5m])))
+rate(metric[5m])                           # taxa por segundo
+increase(metric[5m])                       # valor total no período
+avg_over_time(metric[5m])                  # média móvel
+quantile_over_time(0.99, metric[5m])       # latência p99
 ```
 
-### Latencia (Histogramas)
+### Join (Operação Binária)
 
 ```promql
-# Latencia media por rota (ms)
-sum by(route) (rate(http_request_duration_ms_sum[5m]))
-/
-sum by(route) (rate(http_request_duration_ms_count[5m]))
+# Multiplicar CPU usage pelo custo do node
+rate(container_cpu_usage_seconds_total[5m]) * on(instance) group_left() node_cpu_hourly_cost
 
-# Latencia media geral (ms)
-sum(rate(http_request_duration_ms_sum[5m]))
-/
-sum(rate(http_request_duration_ms_count[5m]))
-
-# Percentil 95 (aproximado)
-histogram_quantile(0.95,
-  sum by(route, le) (rate(http_request_duration_ms_bucket[5m]))
-)
+# Dividir uso por request
+container_memory_working_set_bytes / on(container, pod) group_left() kube_pod_container_resource_requests{resource="memory"}
 ```
 
-### Taxa de Erro
+### Top k
 
 ```promql
-# % de erro por rota
-sum by(route) (rate(http_requests_total{status=~"5..|4.."}[5m]))
-/
-sum by(route) (rate(http_requests_total[5m]))
-* 100
+# Top 5 namespaces por CPU
+topk(5, sum(rate(container_cpu_usage_seconds_total{namespace!=""}[5m])) by (namespace))
 
-# Requisicoes com erro (400, 500)
-http_requests_total{status=~"4..|5.."}
+# Bottom 5 (menos uso)
+bottomk(5, sum(rate(container_cpu_usage_seconds_total{namespace!=""}[5m])) by (namespace))
 ```
 
-### Usuarios Online
+---
+
+## Depuração
+
+### Endpoints Úteis
+
+| Endpoint | O que mostra |
+|----------|--------------|
+| `/api/v1/status/tsdb` | Estatísticas do TSDB, séries por label |
+| `/api/v1/targets` | Health, scrape duration, último erro |
+| `/api/v1/rules` | Regras de alerta e recording |
+| `/api/v1/alerts` | Alertas ativos |
+| `/metrics` | Métricas do próprio Prometheus |
+
+### Métricas do Próprio Prometheus
 
 ```promql
-# Usuarios online atualmente
-users_online
+# Cardinalidade — quantas séries existem
+prometheus_tsdb_head_series
 
-# Usuarios por tier
-sum by(tier) (users_online)
+# Scrapes com erro
+rate(prometheus_target_scrapes_exceeded_sample_limit_total[5m])
 
-# Total de usuarios
-sum(users_online)
+# Queries lentas (>1s)
+histogram_quantile(0.99, rate(prometheus_engine_query_duration_seconds_bucket[5m]))
+
+# WAL replay time (no startup)
+prometheus_tsdb_wal_replay_duration_seconds
+
+# Uso de disco
+prometheus_tsdb_storage_blocks_bytes
 ```
 
-## Como acessar
+### Debug de Scrape
 
 ```bash
-# Port-forward para a UI do Prometheus
-kubectl -n monitoring port-forward svc/prometheus-server 9090:80
+# Verificar se um target está sendo scapeado
+curl -s http://localhost:9090/api/v1/targets | jq '.data.activeTargets[] | select(.health=="down")'
 
-# Acessar http://localhost:9090
+# Ver amostras de uma métrica
+curl -s 'http://localhost:9090/api/v1/query?query=up{job="prometheus"}'
+
+# Valores disponíveis para uma label
+curl -s 'http://localhost:9090/api/v1/label/namespace/values'
 ```
 
-## Comandos Uteis
+---
 
-```bash
-# Ver status do Prometheus
-kubectl get pods -n monitoring | grep prometheus
+## Cardinalidade
 
-# Ver targets configurados
-curl http://localhost:9090/api/v1/targets
+### O Maior Problema do Prometheus
 
-# Ver configuracao atual
-curl http://localhost:9090/api/v1/status/config
+**Sintoma**: Prometheus lento, OOM, queries demoram, disco enche rápido.
 
-# Query via API
-curl "http://localhost:9090/api/v1/query?query=up"
+**Diagnóstico**:
 
-# Query com range (ultimos 5 min)
-curl "http://localhost:9090/api/v1/query_range?query=up&start=$(date -v-5M +%s)&end=$(date +%s)&step=15s"
+```promql
+# Quantas séries no total
+prometheus_tsdb_head_series
+
+# Séries por job (top 5)
+topk(5, count by (job) ({__name__=~".+"}))
+
+# Labels que mais explodem
+count by (__name__) ({__name__=~"container_(.*)"})
 ```
 
-## Referencias
+**Causas Comuns**:
 
-- [PromQL Basics](https://prometheus.io/docs/prometheus/latest/querying/basics/)
-- [Histograms](https://prometheus.io/docs/concepts/metric_types/#histogram)
-- [Rate vs Increase](https://prometheus.io/docs/prometheus/latest/querying/functions/#rate)
+| Causa | Exemplo | Solução |
+|-------|---------|---------|
+| Label com valor único por pod | `pod_ip`, `instance_id` | `metric_relabel_configs` para dropar |
+| Request/path como label | `path="/api/users/123"` | Dropar ou sanitizar |
+| Timestamp no label | `date="2026-06-22T14:00:00Z"` | Dropar — use tempo da série |
+| Container efêmero | Jobs que criam pods únicos | Usar `__meta_kubernetes_pod_controller_kind=JobMonitor` |
+
+**Prevenção**:
+
+```yaml
+metric_relabel_configs:
+  - source_labels: [pod_ip]
+    action: drop
+  - source_labels: [container_id]
+    action: drop
+  - source_labels: [__name__]
+    regex: 'etcd_(.*)'
+    action: drop
+```
