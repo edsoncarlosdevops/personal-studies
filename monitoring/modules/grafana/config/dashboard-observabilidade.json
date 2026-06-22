@@ -1,19 +1,43 @@
 {
+  "meta": {
+    "type": "db",
+    "canSave": true,
+    "canEdit": true,
+    "canAdmin": true,
+    "canStar": true,
+    "canDelete": true,
+    "slug": "stack-de-observabilidade",
+    "url": "/d/efpwvsfaok3r4c/stack-de-observabilidade",
+    "expires": "0001-01-01T00:00:00Z",
+    "created": "2026-06-22T14:44:54Z",
+    "updated": "2026-06-22T14:44:54Z",
+    "updatedBy": "admin",
+    "createdBy": "admin",
+    "version": 1,
+    "hasAcl": false,
+    "isFolder": false,
+    "folderId": 0,
+    "folderUid": "",
+    "folderTitle": "General",
+    "folderUrl": "",
+    "provisioned": false,
+    "provisionedExternalId": "",
+    "annotationsPermissions": {
+      "dashboard": {
+        "canAdd": true,
+        "canEdit": true,
+        "canDelete": true
+      },
+      "organization": {
+        "canAdd": true,
+        "canEdit": true,
+        "canDelete": true
+      }
+    }
+  },
   "dashboard": {
-    "title": "Stack de Observabilidade",
-    "tags": [
-      "observabilidade",
-      "otel",
-      "eks"
-    ],
-    "timezone": "browser",
-    "refresh": "30s",
-    "schemaVersion": 39,
     "panels": [
       {
-        "id": 1,
-        "title": "CPU dos Containers (top 5)",
-        "type": "timeseries",
         "datasource": {
           "type": "prometheus",
           "uid": "PBFA97CFB590B2093"
@@ -24,20 +48,25 @@
           "x": 0,
           "y": 0
         },
+        "id": 1,
         "targets": [
           {
             "expr": "topk(5, sum(rate(container_cpu_usage_seconds_total{namespace!=\"\"}[5m])) by (container, namespace))",
             "legendFormat": "{{namespace}}/{{container}}"
           }
-        ]
+        ],
+        "title": "CPU dos Containers (top 5)",
+        "type": "timeseries"
       },
       {
-        "id": 2,
-        "title": "Memory dos Containers (top 5)",
-        "type": "timeseries",
         "datasource": {
           "type": "prometheus",
           "uid": "PBFA97CFB590B2093"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "bytes"
+          }
         },
         "gridPos": {
           "h": 8,
@@ -45,22 +74,17 @@
           "x": 12,
           "y": 0
         },
+        "id": 2,
         "targets": [
           {
             "expr": "topk(5, sum(container_memory_working_set_bytes{namespace!=\"\"}) by (container, namespace))",
             "legendFormat": "{{namespace}}/{{container}}"
           }
         ],
-        "fieldConfig": {
-          "defaults": {
-            "unit": "bytes"
-          }
-        }
+        "title": "Memory dos Containers (top 5)",
+        "type": "timeseries"
       },
       {
-        "id": 3,
-        "title": "Pods por Namespace",
-        "type": "stat",
         "datasource": {
           "type": "prometheus",
           "uid": "PBFA97CFB590B2093"
@@ -71,17 +95,17 @@
           "x": 0,
           "y": 8
         },
+        "id": 3,
         "targets": [
           {
             "expr": "count(kube_pod_status_phase{phase=\"Running\"}) by (namespace)",
             "legendFormat": "{{namespace}}"
           }
-        ]
+        ],
+        "title": "Pods por Namespace",
+        "type": "stat"
       },
       {
-        "id": 4,
-        "title": "Nodes - CPU (%)",
-        "type": "timeseries",
         "datasource": {
           "type": "prometheus",
           "uid": "PBFA97CFB590B2093"
@@ -92,17 +116,17 @@
           "x": 8,
           "y": 8
         },
+        "id": 4,
         "targets": [
           {
             "expr": "100 - (avg(rate(node_cpu_seconds_total{mode=\"idle\"}[1m])) by (instance) * 100)",
             "legendFormat": "{{instance}}"
           }
-        ]
+        ],
+        "title": "Nodes - CPU (%)",
+        "type": "timeseries"
       },
       {
-        "id": 5,
-        "title": "Nodes - Memory (%)",
-        "type": "timeseries",
         "datasource": {
           "type": "prometheus",
           "uid": "PBFA97CFB590B2093"
@@ -113,69 +137,17 @@
           "x": 16,
           "y": 8
         },
+        "id": 5,
         "targets": [
           {
             "expr": "(1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) * 100",
             "legendFormat": "{{instance}}"
           }
-        ]
-      },
-      {
-        "id": 6,
-        "title": "Traces - api-pedidos",
-        "type": "table",
-        "datasource": {
-          "type": "tempo",
-          "uid": "P214B5B846CF3925F"
-        },
-        "gridPos": {
-          "h": 8,
-          "w": 12,
-          "x": 0,
-          "y": 16
-        },
-        "targets": [
-          {
-            "query": "{\"rootServiceName\"=\"api-pedidos\"}",
-            "limit": 20
-          }
         ],
-        "fieldConfig": {
-          "defaults": {
-            "custom": {
-              "align": "left"
-            }
-          },
-          "overrides": [
-            {
-              "matcher": {
-                "id": "byName",
-                "options": "traceID"
-              },
-              "properties": [
-                {
-                  "id": "links",
-                  "value": [
-                    {
-                      "title": "Ver detalhes",
-                      "url": "",
-                      "internal": {
-                        "queryType": "traceId",
-                        "datasourceUid": "P214B5B846CF3925F",
-                        "datasourceName": "Tempo"
-                      }
-                    }
-                  ]
-                }
-              ]
-            }
-          ]
-        }
+        "title": "Nodes - Memory (%)",
+        "type": "timeseries"
       },
       {
-        "id": 7,
-        "title": "Logs (Loki)",
-        "type": "logs",
         "datasource": {
           "type": "loki",
           "uid": "P8E80F9AEF21F6940"
@@ -186,20 +158,28 @@
           "x": 12,
           "y": 16
         },
+        "id": 7,
         "targets": [
           {
             "expr": "{stream=~\".+\"}",
             "limit": 50
           }
-        ]
+        ],
+        "title": "Logs (Loki)",
+        "type": "logs"
       },
       {
-        "id": 8,
-        "title": "Uptime dos Pods",
-        "type": "table",
         "datasource": {
           "type": "prometheus",
           "uid": "PBFA97CFB590B2093"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "custom": {
+              "align": "left"
+            },
+            "unit": "s"
+          }
         },
         "gridPos": {
           "h": 8,
@@ -207,23 +187,29 @@
           "x": 0,
           "y": 24
         },
+        "id": 8,
         "targets": [
           {
             "expr": "time() - kube_pod_start_time",
-            "legendFormat": "{{pod}}",
             "format": "table",
-            "instant": true
+            "instant": true,
+            "legendFormat": "{{pod}}"
           }
         ],
-        "fieldConfig": {
-          "defaults": {
-            "unit": "s",
-            "custom": {
-              "align": "left"
-            }
-          }
-        }
+        "title": "Uptime dos Pods",
+        "type": "table"
       }
-    ]
+    ],
+    "refresh": "30s",
+    "schemaVersion": 39,
+    "tags": [
+      "observabilidade",
+      "otel",
+      "eks"
+    ],
+    "timezone": "browser",
+    "title": "Stack de Observabilidade",
+    "uid": "efpwvsfaok3r4c",
+    "version": 1
   }
 }
