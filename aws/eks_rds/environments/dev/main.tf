@@ -71,12 +71,15 @@ module "bastion" {
 
 # ---- ARGOCD ----
 module "argocd" {
-  source = "../../modules/argocd"
+  source = "../../../modules/argocd"
 
-  environment                = "dev"
-  eks_cluster_endpoint       = module.eks.cluster_endpoint
-  eks_cluster_ca_certificate = module.eks.cluster_certificate_authority
-  eks_cluster_name           = module.eks.cluster_name
-  argocd_version             = "7.8.1"
+  context                  = "dev"
+  argocd_chart_version     = "7.8.1"
+  argocd_namespace         = "argocd"
+  argocd_server_service_type = "ClusterIP"
+  argocd_domain            = "argocd.dev.local"
+  argocd_ingress_enabled   = true
+  argocd_ingress_class     = "nginx"
+  argocd_tls_enabled       = false
 }
 
