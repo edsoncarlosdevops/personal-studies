@@ -1,0 +1,136 @@
+# Redis - Configuration System
+# =====================================================================
+# Redis e um armazenamento de estrutura de dados em memoria,
+# usado como cache, banco de dados e message broker.
+#
+# Portas padrao:
+# - 6379: porta do Redis (conexao de aplicacoes)
+# - 9121: porta do redis-exporter (metricas Prometheus)
+#
+# Fluxo:
+#   Aplicacao -> redis-headless:6379 -> Redis Cluster
+#         |
+#         +--> redis-exporter:9121 -> Prometheus (scrape)
+# =====================================================================
+
+# --- Configuracao do Cluster ---
+
+# Número de replicas do Redis.
+# Cada replica e um pod com uma instancia do Redis rodando.
+# Valores comuns:
+#   - 1: dev/lab (sem replicacao)
+#   - 3: producao pequena (1 master + 2 replicas)
+#   - 6: producao com sentinel (3 masters + 3 replicas)
+replicaCount: ${redis_replica_count}
+
+# --- Arquitetura do Redis ---
+# O chart oferece 3 modos de operacao:
+#
+# 1. standalone (padrao):
+#    - Um unico Redis, sem replicacao.
+#    - Simples, mas sem alta disponibilidade.
+#    - Use quando o cache pode ser perdido sem impacto.
+#
+# 2. replication:
+#    - Um master + N replicas (read replicas).
+#    - Escrita no master, leitura nas replicas.
+#    - Se o master cair, voce perde escrita ate subir de novo.
+#    - Use para workloads que precisam de mais throughput de leitura.
+#
+# 3. sentinel:
+#    - Master + replicas + sentinels (monitoram e fazem failover automatico).
+#    - Se o master cai, um sentinel promove uma replica a master.
+#    - Alta disponibilidade real.
+#    - Use para dados que nao podem ser perdidos.
+#
+# NOTA: Sentinel requer replicaCount >= 3 e sentinel.enabled=true.
+
+architecture: ${redis_architecture}
+
+# Configuracao do modo sentinel (ignorado se architecture != sentinel)
+sentinel:
+  enabled: false
+  # Nome do cluster Redis Sentinel.
+  # Precisa ser o mesmo em todas as instancias do cluster.
+  masterSet: mymaster
+
+# --- Autenticacao ---
+
+# Senha do Redis.
+# Se vazia, o Redis inicia sem autenticacao (NAO recomendado em producao).
+# Em producao, use um secret gerenciado pelo Vault ou AWS Secrets Manager.
+auth:
+  enabled: ${redis_auth_enabled}
+  # sentinel: false
+  # existingSecret: redis-secret  # se quiser usar um secret existente
+  # existingSecretPasswordKey: redis-password
+
+# --- Recursos ---
+
+resources:
+  limits:
+    cpu: 500m
+    memory: 256Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
+
+# --- Persistencia ---
+
+# Redis e em memoria, mas pode persistir em disco (RDB ou AOF).
+# Sem persistencia, se o pod reiniciar, todos os dados sao perdidos.
+#
+# RDB (padrao): snapshot periodico. Mais rapido, mas pode perder dados
+#   do ultimo snapshot.
+# AOF: log de cada operacao de escrita. Mais seguro, mas mais lento.
+#   Use AOF se os dados sao criticos.
+persistence:
+  enabled: ${redis_persistence_enabled}
+  size: ${redis_persistence_size}
+  # storageClass: gp2  # deixe vazio para usar o default do cluster
+
+# --- Metricas (redis-exporter) ---
+
+# O redis-exporter expoe metricas no formato Prometheus em /metrics.
+# O Prometheus precisa de um ServiceMonitor para fazer o scrape.
+metrics:
+  enabled: true
+  serviceMonitor:
+    enabled: true
+    # Intervalo de coleta. Mais frequente = mais precisao, mais recursos.
+    interval: 30s
+    # Namespace onde o ServiceMonitor sera criado.
+    # Precisa ser o mesmo namespace do Prometheus Operator.
+    namespace: monitoring
+    # Labels para o Prometheus Operator identificar este ServiceMonitor.
+    additionalLabels:
+      release: prometheus
+
+# --- Configuracoes do Redis (redis.conf) ---
+
+# Configuracoes customizadas do redis.conf.
+# Cada chave vira uma linha no redis.conf.
+# Lista completa: https://raw.githubusercontent.com/redis/redis/stable/redis.conf
+redis:
+  # maxmemory: Limite de memoria que o Redis pode usar.
+  # Quando atingido, o Redis aplica a politica definida em maxmemory-policy.
+  # Valores comuns:
+  #   - 256mb: dev/lab
+  #   - 1gb: producao pequena
+  #   - 10gb: producao media
+  # IMPORTANTE: Sempre deixe um pouco abaixo do limits.memory para evitar OOM.
+  configmap: |-
+    maxmemory 200mb
+    # maxmemory-policy: o que fazer quando maxmemory e atingido.
+    # Opcoes comuns:
+    #   allkeys-lru: remove as chaves menos usadas recentemente (MAIS COMUM)
+    #   allkeys-lfu: remove as chaves menos frequentemente usadas
+    #   volatile-lru: remove apenas chaves com TTL (expiration)
+    #   noeviction: retorna erro em novas escritas (NAO recomendo em cache)
+    maxmemory-policy allkeys-lru
+    # save: frequencia dos snapshots RDB.
+    # save 3600 1 = snapshot a cada 3600s se ao menos 1 chave mudou.
+    # Se nao precisa de persistencia, comente todas as linhas save.
+    save 3600 1
+    save 300 100
+    save 60 10000

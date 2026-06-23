@@ -1,0 +1,95 @@
+# Thanos - Configuration System
+# =====================================================================
+# Thanos e um conjunto de componentes que estendem o Prometheus,
+# adicionando armazenamento de longa duracao (object storage) e
+# consulta global (cross-cluster).
+#
+# Problema que o Thanos resolve:
+# - Prometheus tem retencao limitada (15-30 dias)
+# - Prometheus e stateless, se o pod morre os dados antigos somem
+# - Nao da para consultar dados de multiplos clusters em um unico lugar
+#
+# Componentes do Thanos:
+# 1. Sidecar:     Roda junto com cada Prometheus, envia dados para o S3
+# 2. Store:       Serve dados historicos do S3, responde queries
+# 3. Compactor:   Compacta e deduplica dados no S3, aplica retencao
+# 4. Query:       Ponto unico de consulta, junta dados de varios Stores
+# 5. Receive:     Recebe dados via Remote Write (alternativa ao sidecar)
+# =====================================================================
+
+# --- Configuracao do Object Storage ---
+
+# Thanos precisa de um bucket S3 (ou compativel: MinIO, GCS, Azure).
+# Sem isso, os componentes Store e Compactor nao iniciam.
+
+objstoreConfig:
+  type: ${thanos_objstore_type}
+  config:
+    bucket: ${thanos_objstore_bucket}
+    endpoint: ${thanos_objstore_endpoint}
+    # Para usar MinIO local (lab/teste):
+    # endpoint: minio.monitoring.svc.cluster.local:9000
+    # insecure: true
+    access_key: ${AWS_ACCESS_KEY_ID}
+    secret_key: ${AWS_SECRET_ACCESS_KEY}
+
+# --- Componentes ---
+
+# 1. Store
+# Serve dados historicos do object storage.
+store:
+  enabled: ${thanos_store_enabled}
+  grpcSeriesMaxConcurrency: 20
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 100m
+      memory: 256Mi
+
+# 2. Compactor
+# Compacta, deduplica e aplica retencao nos blocks do S3.
+# IMPORTANTE: So deve ter 1 compactor ativo por cluster Thanos.
+compactor:
+  enabled: ${thanos_compactor_enabled}
+  compactionInterval: 1h
+  retentionResolutionRaw: ${thanos_retention_raw}
+  retentionResolution5m: ${thanos_retention_5m}
+  retentionResolution1h: ${thanos_retention_1h}
+  resources:
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+    requests:
+      cpu: 200m
+      memory: 512Mi
+
+# 3. Query
+# Ponto unico de consulta. O Grafana consulta o Query em vez do Prometheus.
+query:
+  enabled: ${thanos_query_enabled}
+  dnsDiscovery:
+    sidecarsNamespace: monitoring
+    sidecarsService: prometheus-thanos-discovery
+    storeNamespace: thanos
+    storeService: thanos-store
+  replicas: ${thanos_query_replicas}
+  resources:
+    limits:
+      cpu: 500m
+      memory: 1Gi
+    requests:
+      cpu: 100m
+      memory: 256Mi
+
+# --- Metricas ---
+
+metrics:
+  enabled: true
+  serviceMonitor:
+    enabled: true
+    interval: 30s
+    namespace: monitoring
+    additionalLabels:
+      release: prometheus

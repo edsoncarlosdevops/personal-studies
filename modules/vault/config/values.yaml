@@ -1,0 +1,127 @@
+# Vault - Configuration System
+# =====================================================================
+# HashiCorp Vault e um gerenciador de segredos e criptografia.
+# Armazena e controla acesso a: senhas, API keys, certificados TLS,
+# chaves SSH e qualquer dado sensivel.
+#
+# Portas padrao:
+# - 8200: API HTTP (consulta de segredos, autenticacao)
+# - 8201: Cluster (comunicacao interna entre pods em HA)
+# - 9121: Metricas (vault-exporter, opcional)
+#
+# Fluxo:
+#   Aplicacao -> Vault (:8200) -> Autentica (token/K8s Auth) -> Le segredo
+#                                      |
+#                           Vault descriptografa e retorna
+#                                      |
+#                           Aplicacao usa a credencial (tempo limitado)
+#
+# Diferente do Keycloak (identidade), o Vault gerencia CREDENCIAIS.
+# =====================================================================
+
+# --- Modo de operacao ---
+
+# O Vault pode operar em 3 modos:
+#
+# 1. dev (NAO use em producao):
+#    - Inicia ja desbloqueado (unsealed), sem persistencia.
+#    - Dados sao perdidos ao reiniciar.
+#    - Apenas para testar a API rapidamente.
+#
+# 2. standalone:
+#    - Um pod Vault + persistencia em disco.
+#    - Requer unseal manual a cada restart.
+#    - Simples, mas sem alta disponibilidade.
+#
+# 3. ha:
+#    - Multiplos pods, um e leader, os outros fazem standby.
+#    - Requer storage externo (Raft, Consul, S3).
+#    - HA real com failover automatico.
+#    - Use em producao.
+
+mode: ${vault_mode}
+
+# --- Configuracao do servidor Vault ---
+
+server:
+  ha:
+    enabled: ${vault_mode == "ha"}
+    replicas: ${vault_replica_count}
+    raft:
+      enabled: ${vault_mode == "ha"}
+      setNodeId: true
+      config: |
+        ui = ${vault_ui_enabled}
+
+        listener "tcp" {
+          address = "[::]:8200"
+          cluster_address = "[::]:8201"
+          tls_disable = true
+        }
+
+        storage "raft" {
+          path = "/vault/data"
+          node_id = "vault-0"
+
+          retry_join {
+            leader_api_addr = "http://vault-active:8200"
+          }
+          retry_join {
+            leader_api_addr = "http://vault-1.vault-internal:8200"
+          }
+          retry_join {
+            leader_api_addr = "http://vault-2.vault-internal:8200"
+          }
+        }
+
+        service_registration "kubernetes" {}
+
+  standalone:
+    enabled: ${vault_mode == "standalone"}
+    config: |
+      ui = ${vault_ui_enabled}
+
+      listener "tcp" {
+        address = "[::]:8200"
+        cluster_address = "[::]:8201"
+        tls_disable = true
+      }
+
+      storage "file" {
+        path = "/vault/data"
+      }
+
+      service_registration "kubernetes" {}
+
+# --- UI ---
+
+ui:
+  enabled: ${vault_ui_enabled}
+  serviceType: ClusterIP
+
+# --- Persistencia ---
+
+persistence:
+  enabled: ${vault_persistence_enabled}
+  size: ${vault_persistence_size}
+
+# --- Recursos ---
+
+resources:
+  limits:
+    cpu: 500m
+    memory: 512Mi
+  requests:
+    cpu: 100m
+    memory: 256Mi
+
+# --- Metricas ---
+
+metrics:
+  enabled: true
+  serviceMonitor:
+    enabled: true
+    interval: 30s
+    namespace: monitoring
+    additionalLabels:
+      release: prometheus

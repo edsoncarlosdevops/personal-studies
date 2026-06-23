@@ -1,0 +1,143 @@
+# Keycloak - Configuration System
+# =====================================================================
+# Keycloak e um servidor de gerenciamento de identidade e acesso (IAM).
+# Fornece autenticacao (login), autorizacao (permissoes) e SSO
+# (Single Sign-On) via protocolos OAuth2, OpenID Connect e SAML.
+#
+# Portas padrao:
+# - 8080: HTTP (sem TLS, usado internamente no cluster)
+# - 8443: HTTPS (com TLS, para acesso externo)
+#
+# Fluxo:
+#   Usuario -> Navegador -> Keycloak (:8080) -> Banco de dados (PostgreSQL)
+#                                       |
+#                        Aplicacao redireciona para Keycloak no login
+#                                       |
+#                        Keycloak emite token JWT -> Aplicacao valida
+#
+# O Keycloak PRECISA de um banco de dados PostgreSQL. Ele nao funciona
+# com SQLite em producao. O chart ja inclui o PostgreSQL como dependencia.
+# =====================================================================
+
+# --- Configuracao Geral ---
+
+# Numero de replicas do Keycloak.
+# Em producao, use 2+ com um banco PostgreSQL externo para HA.
+replicaCount: ${keycloak_replica_count}
+
+# --- Imagem ---
+
+image:
+  registry: quay.io
+  repository: keycloak/keycloak
+  # Versao estavel recomendada (abril/2026).
+  # Versoes do Keycloak:
+  #   - 22.x: ultima com WildFly (legado)
+  #   - 23.x+: nova arquitetura Quarkus (recomendado)
+  # IMPORTANTE: Keycloak 23+ mudou completamente a estrutura de configuracao.
+  # Nao use guias antigos (pre-23) com versoes novas.
+  tag: 26.0.5
+
+# --- Banco de Dados ---
+
+# Keycloak precisa de PostgreSQL. O chart oferece:
+# 1. PostgreSQL interno (padrao): usa subchart bitnami/postgresql
+# 2. PostgreSQL externo: use production=true e externalDatabase.*
+#
+# Para producao, SEMPRE use banco externo gerenciado (RDS, CloudSQL).
+# O banco interno e apenas para lab/teste.
+
+postgresql:
+  # Desabilita PostgreSQL interno se for usar um externo.
+  enabled: ${keycloak_postgresql_enabled}
+
+  # --- Configuracao do PostgreSQL interno ---
+  # Username e database sao fixos (keycloak).
+  # A senha e gerada automaticamente se nao for definida.
+  auth:
+    username: keycloak
+    password: ${keycloak_postgresql_password}
+    database: keycloak
+  primary:
+    persistence:
+      enabled: true
+      size: 10Gi
+    resources:
+      limits:
+        cpu: 500m
+        memory: 512Mi
+      requests:
+        cpu: 100m
+        memory: 256Mi
+
+# --- Autenticacao Admin ---
+
+auth:
+  # Usuario administrador do Keycloak.
+  # Use este usuario para acessar /admin no console web.
+  adminUser: ${keycloak_admin_user}
+  # Senha do admin. Em producao, use uma senha forte.
+  # Se vazia, o chart gera uma automaticamente.
+  adminPassword: ${keycloak_admin_password}
+
+# --- Configuracoes do Keycloak (via variáveis de ambiente) ---
+
+extraEnvVars:
+  # KC_PROXY: modo de proxy.
+  # Opcoes:
+  #   - edge:     Keycloak confia no proxy (terminacao TLS no ingress)
+  #   - reencrypt: TLS do proxy para o Keycloak (terminacao TLS no pod)
+  #   - passthrough: TLS direto (sem proxy, sem ingress)
+  # edge e o mais comum quando se usa Ingress Controller.
+  - name: KC_PROXY
+    value: edge
+
+  # KC_HTTP_ENABLED: habilita HTTP (nao apenas HTTPS).
+  # Em cluster Kubernetes, o TLS geralmente e terminado no Ingress,
+  # entao o Keycloak pode rodar HTTP internamente.
+  - name: KC_HTTP_ENABLED
+    value: "true"
+
+  # KC_CACHE: tipo de cache distribuido.
+  # Opcoes:
+  #   - local:    cache local (cada pod tem seu proprio cache, NAO use em HA)
+  #   - ispn:     Infinispan (cache distribuido entre pods, use em producao)
+  # Em producao com replicas > 1, use ispn. Requer discovery via DNS.
+  - name: KC_CACHE
+    value: ispn
+
+  # KC_CACHE_STACK: pilha de cache do Infinispan.
+  # Opcoes:
+  #   - kubernetes:  usa DNS para descobrir outros pods (recomendado)
+  #   - tcp:         usa enderecos fixos (nao recomendado)
+  #   - udp:         usa multicast (pode nao funcionar em cloud)
+  - name: KC_CACHE_STACK
+    value: kubernetes
+
+  # KC_DB: tipo de banco de dados.
+  # Keycloak suporta: postgresql, mysql, mariadb, oracle, mssql.
+  - name: KC_DB
+    value: postgresql
+
+# --- Recursos ---
+
+# Keycloak e heavy em CPU e memoria, especialmente no startup
+# (ele carrega todos os realms, clients e users para cache).
+resources:
+  limits:
+    cpu: 2000m
+    memory: 2048Mi
+  requests:
+    cpu: 500m
+    memory: 1024Mi
+
+# --- Metricas ---
+
+metrics:
+  enabled: true
+  serviceMonitor:
+    enabled: true
+    interval: 30s
+    namespace: monitoring
+    additionalLabels:
+      release: prometheus

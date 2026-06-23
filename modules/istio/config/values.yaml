@@ -1,0 +1,252 @@
+# Istio - Configuration System
+# =====================================================================
+# Istio e um service mesh (malha de servicos). Ele adiciona um proxy
+# (Envoy) ao lado de cada pod (sidecar) e gerencia todo o trafego
+# de rede entre os servicos.
+#
+# Diferenca entre Istio e Ingress tradicional:
+# - Ingress (Nginx): controla trafego DE FORA para DENTRO do cluster
+# - Istio: controla trafego entre servicos DENTRO do cluster +
+#          trafego de fora para dentro (via Istio Ingress Gateway)
+#
+# O que o Istio adiciona:
+# 1. Mutuo TLS (mTLS): toda comunicacao entre pods e criptografada
+# 2. Traffic management: canary, blue-green, circuit breaker, retries
+# 3. Observabilidade: metricas L4/L7, tracing distribuido, logs de acesso
+# 4. Security: autorizacao baseada em identidade do servico
+# 5. Resilience: timeouts, retries, circuit breaking, fault injection
+#
+# Fluxo:
+#   Pod A (com Envoy) -> mTLS -> Pod B (com Envoy)
+#         |                         |
+#   Envoy intercepta todo     Envoy recebe, aplica
+#   trafego de saída          politicas de trafego
+#         |                         |
+#   Gera metricas,          Re-tenta se falhar,
+#   adiciona headers        circuit breaker se muitos erros
+#
+# ATENCAO: Istio e um dos componentes MAIS COMPLEXOS do ecossistema K8s.
+# Nao instale sem entender o que cada parte faz.
+# =====================================================================
+
+# --- Componentes do Istio ---
+
+# O Istio tem 2 planos:
+# 1. Control Plane (istiod): gerencia configuracoes, distribui certs
+# 2. Data Plane (Envoy proxies): sidecars que interceptam o trafego
+#
+# O chart instala o Control Plane (istiod).
+# Os sidecars (Envoy) sao injetados automaticamente nos pods via
+# namespace label: `istio-injection=enabled`.
+
+# --- Mesh Config ---
+
+# Configuracoes globais do mesh.
+# Aplicam a TODOS os servicos dentro do mesh.
+
+meshConfig:
+  # --- mTLS (Mutual TLS) ---
+  # Controla se a comunicacao entre servicos e criptografada.
+  # Opcoes:
+  #   DISABLE: sem TLS (trafego em texto plano)
+  #   PERMISSIVE: aceita TLS e texto plano (migracao)
+  #   STRICT: apenas TLS (recomendado em producao)
+  #
+  # Durante a migracao para Istio, comece com PERMISSIVE.
+  # Quando todos os servicos estiverem com sidecar, mude para STRICT.
+  enableAutoMtls: true
+
+  # --- Access Logs ---
+  # Habilita logs de acesso do Envoy.
+  # Cada requisicao gera uma linha de log com: metodo, path, status, duracao.
+  # Use para debug, auditoria ou enviar para Loki.
+  accessLogFile: /dev/stdout
+  # Formato do log de acesso.
+  # Opcoes:
+  #   TEXT: legivel para humanos
+  #   JSON: estruturado (melhor para parse no Loki)
+  accessLogFormat: |
+    {
+      "start_time": "%START_TIME%",
+      "method": "%REQ(:METHOD)%",
+      "path": "%REQ(X-ENVOY-ORIGINAL-PATH?)%",
+      "protocol": "%PROTOCOL%",
+      "response_code": "%RESPONSE_CODE%",
+      "response_flags": "%RESPONSE_FLAGS%",
+      "bytes_received": "%BYTES_RECEIVED%",
+      "bytes_sent": "%BYTES_SENT%",
+      "duration": "%DURATION%",
+      "upstream_service_time": "%RESP(X-ENVOY-UPSTREAM-SERVICE-TIME)%",
+      "x_forwarded_for": "%REQ(X-FORWARDED-FOR)%",
+      "user_agent": "%REQ(USER-AGENT)%",
+      "request_id": "%REQ(X-REQUEST-ID)%",
+      "authority": "%REQ(:AUTHORITY)%",
+      "upstream_host": "%UPSTREAM_HOST%",
+      "upstream_cluster": "%UPSTREAM_CLUSTER%",
+      "upstream_local_address": "%UPSTREAM_LOCAL_ADDRESS%",
+      "downstream_local_address": "%DOWNSTREAM_LOCAL_ADDRESS%",
+      "downstream_remote_address": "%DOWNSTREAM_REMOTE_ADDRESS%",
+      "requested_server_name": "%REQUESTED_SERVER_NAME%",
+      "route_name": "%ROUTE_NAME%"
+    }
+
+  # --- Tracing ---
+  # Habilita tracing distribuido (Envoy envia spans para Tempo/Zipkin).
+  # Cada requisicao entre servicos gera spans que podem ser vistos no Grafana.
+  enableTracing: true
+  # Tipo de tracing: Zipkin (viaja com header B3) ou OpenTelemetry (OTLP).
+  # Use Zipkin se o Tempo esta configurado para receber via Zipkin.
+  # Use OpenTelemetry se o Tempo recebe via OTLP (porta 4317).
+  # O Tempo no monitoring esta configurado para OTLP (porta 4317).
+  defaultConfig:
+    tracing:
+      zipkin:
+        # Endereco do Tempo/collector.
+        # Se o Tempo estiver no monitoring: tempo.monitoring.svc.cluster.local
+        address: tempo.monitoring.svc.cluster.local:4317
+    # Habilita coleta de metadados do Envoy.
+    # Envia para o Prometheus: istio_requests_total, istio_request_duration, etc.
+    proxyMetadata:
+      ISTIO_META_DNS_CAPTURE: "true"
+      ISTIO_META_DNS_AUTO_ALLOCATE: "true"
+
+# --- Ingress Gateway ---
+
+# O Istio Ingress Gateway substitui o Nginx Ingress Controller.
+# Ele e um proxy Envoy que fica na borda do cluster e gerencia
+# o trafego de entrada.
+#
+# Diferencas:
+# - Ingress: roteamento simples (host -> servico)
+# - Istio Gateway: roteamento + mTLS + retries + circuit breaker + canary
+#
+# Quando usar Istio Ingress Gateway:
+#   - Quando precisa de canary deployment
+#   - Quando precisa de mTLS ate o ingress
+#   - Quando ja tem Istio no cluster
+# Quando usar Nginx Ingress:
+#   - Setup mais simples
+#   - Comunidade maior, mais exemplos
+#   - Nao precisa de service mesh
+
+gateways:
+  ingress:
+    enabled: true
+    # Replicas do ingress gateway.
+    # 1 e suficiente para lab, 2+ para producao (HA).
+    replicas: 2
+    resources:
+      limits:
+        cpu: 2000m
+        memory: 1Gi
+      requests:
+        cpu: 500m
+        memory: 512Mi
+    # Tipo do servico.
+    # LoadBalancer: cria um LB na cloud (AWS NLB, GCP GLB)
+    # NodePort: usa porta do node (lab/teste)
+    # ClusterIP: interno (precisa de outro ingress na frente)
+    service:
+      type: LoadBalancer
+      # Portas abertas.
+      # 80 e 443 sao as principais para trafego HTTP/HTTPS.
+      # 15021 e a porta de health check do gateway.
+      ports:
+        - port: 80
+          targetPort: 8080
+          name: http
+        - port: 443
+          targetPort: 8443
+          name: https
+        - port: 15021
+          targetPort: 15021
+          name: status-port
+
+# --- Egress Gateway ---
+
+# O Egress Gateway controla o trafego de SAIDA do cluster (para internet).
+# Use quando:
+#   - Precisa de um IP fixo para whitelist em APIs externas
+#   - Quer monitorar todo trafego de saida
+#   - Precisa de politicas de seguranca para acesso externo
+#
+# NOTA: Egress Gateway adiciona complexidade. So habilite se precisar.
+
+gateways:
+  egress:
+    enabled: false
+
+# --- Proxy (sidecar) ---
+
+# Configuracoes do proxy Envoy que sera injetado nos pods.
+# Estas configuracoes aplicam a TODOS os servicos no mesh.
+
+# proxy:
+#   resources:
+#     limits:
+#       cpu: 2000m
+#       memory: 512Mi
+#     requests:
+#       cpu: 100m
+#       memory: 128Mi
+#   # Log level do Envoy.
+#   # Opcoes: trace, debug, info, warning, error, critical, off
+#   # warning: padrao (so mostra avisos e erros)
+#   # debug: mostra tudo (MUITO verboso, so use para debug)
+#   logLevel: warning
+
+# --- Injection ---
+
+# O Istio injeta o sidecar Envoy nos pods automaticamente.
+# Existem 2 formas:
+#
+# 1. Label no namespace:
+#    kubectl label namespace default istio-injection=enabled
+#    Todos os pods novos nesse namespace recebem o sidecar.
+#
+# 2. Annotation no pod:
+#    sidecar.istio.io/inject: "true"
+#    Apenas pods com essa annotation recebem o sidecar.
+#
+# A opcao 1 (label no namespace) e a mais comum.
+
+# --- Pilot (istiod) ---
+
+# istiod e o componente central que gerencia todo o mesh.
+# Ele configura os Envoys, distribui certificados mTLS e
+# processa as regras de trafego (VirtualService, DestinationRule).
+
+pilot:
+  resources:
+    limits:
+      cpu: 500m
+      memory: 1Gi
+    requests:
+      cpu: 200m
+      memory: 512Mi
+
+# --- Metricas ---
+
+# O Istio expoe metricas no formato Prometheus em todas as portas 15090.
+# O Prometheus precisa scapear:
+#   - istiod: servico istiod, porta 15014
+#   - Ingress Gateway: servico istio-ingressgateway, porta 15090
+#   - Sidecars: cada pod, porta 15090
+#
+# O chart do kube-prometheus-stack ja inclui um PodMonitor para
+# coletar metricas dos sidecars Istio.
+
+telemetry:
+  enabled: true
+  v2:
+    # Desabilita Prometheus scraping via Pilot (deixe o Prometheus Operator
+    # gerenciar os scrapes via ServiceMonitor/PodMonitor).
+    prometheus:
+      enabled: false
+
+# --- Configuracao Grafana (opcional) ---
+
+# O Istio inclui dashboards para o Grafana.
+# Eles mostram: taxa de requests, erros, latencia entre servicos.
+# Se os dashboards nao aparecerem no Grafana, importe manualmente:
+# https://grafana.com/grafana/dashboards/?search=istio
