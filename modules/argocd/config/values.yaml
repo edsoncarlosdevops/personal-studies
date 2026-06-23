@@ -1,0 +1,138 @@
+# ArgoCD - Configuration System
+# =====================================================================
+# ArgoCD e uma ferramenta GitOps para Kubernetes.
+# Ela monitora um repositorio Git e mantem o cluster sincronizado
+# com o que esta descrito nos manifests do repositorio.
+#
+# Fluxo GitOps:
+#   1. Voce altera um arquivo YAML no Git (ex: deployment.yaml)
+#   2. ArgoCD detecta a mudanca (polling ou webhook)
+#   3. ArgoCD aplica a mudanca no cluster Kubernetes
+#   4. Se alguem alterar o cluster manualmente, ArgoCD reverte
+#
+# Portas padrao:
+#   - 443 (HTTPS): ArgoCD Server (UI e API)
+#   - 8080 (HTTP): ArgoCD Server (redireciona para 443)
+#   - 8082: ArgoCD Repo Server (comunicacao interna)
+#
+# Componentes:
+#   argocd-server      - UI, API, CLI (unico que usuario acessa)
+#   argocd-repo-server - Clona repos, gera manifests (internal)
+#   argocd-application-controller - Reconcilia Applications
+#   argocd-redis       - Cache do estado (internal)
+#   argocd-dex-server  - Autenticacao SSO (opcional)
+#
+# Documentacao oficial:
+#   https://argo-cd.readthedocs.io/en/stable/operator-manual/server/
+# =====================================================================
+
+# ── Configuracao Global ──
+global:
+  # Dominio do ArgoCD. Usado para gerar URLs no Ingress e notificacoes.
+  # Se voce mudar o dominio depois de instalado, precisa atualizar
+  # o Ingress e re-sincronizar.
+  domain: ${argocd_domain}
+
+# ── Configuracao do Server ──
+server:
+  # Tipo do Service que expoe o ArgoCD Server.
+  # ClusterIP: acessivel apenas dentro do cluster (recomendado).
+  # Precisa de um Ingress ou port-forward para acessar de fora.
+  service:
+    type: ${argocd_server_service_type}
+
+  # --insecure: executa o servidor sem TLS proprio (deixa o Ingress
+  #   ou LoadBalancer fazer o TLS termination). Sem isso, o ArgoCD
+  #   tenta gerar certificado proprio e da erro se TLS nao configurado.
+  extraArgs:
+    - --insecure
+
+  # Recursos do container do ArgoCD Server.
+  # O ArgoCD Server e o componente que serve a UI e API.
+  # Em clusters pequenos (dev/lab), 100m/128Mi e suficiente.
+  # Em producao, aumente para 250m/512Mi ou mais conforme uso.
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 250m
+      memory: 256Mi
+
+  # ── Configuracao do Ingress ──
+  # Expoe o ArgoCD externamente via Ingress.
+  # Requer um Ingress Controller instalado no cluster.
+  ingress:
+    # Habilita/desabilita a criacao do Ingress.
+    # Se false, voce precisa de port-forward ou LoadBalancer.
+    enabled: ${argocd_ingress_enabled}
+
+    # Nome da ingress class.
+    # O Ingress Controller usa isso para se identificar.
+    ingressClassName: "${argocd_ingress_class}"
+
+    # Hostname do Ingress.
+    # O DNS precisa apontar para o IP do Ingress Controller.
+    # Em lab local, use /etc/hosts ou nip.io
+    hosts:
+      - ${argocd_domain}
+
+    # Caminhos do Ingress.
+    # Geralmente "/" cobre tudo. Se precisar de multiplos paths,
+    # adicione mais entradas (ex: /api, /grpc).
+    paths:
+      - /
+
+    # Configuracao TLS (HTTPS).
+    # Se habilitado, o Ingress espera um Secret com o certificado.
+    # O Secret precisa existir no mesmo namespace do ArgoCD.
+    # Para certificados auto-assinados (lab):
+    #   kubectl -n argocd create secret tls argocd-tls \
+    #     --cert=tls.crt --key=tls.key
+    # Para Lets Encrypt (producao), use cert-manager.
+    tls:
+      - hosts:
+          - ${argocd_domain}
+        secretName: argocd-tls
+
+# ── Configuracao do Application Controller ──
+controller:
+  # Recursos do Application Controller.
+  # Este componente faz a "magica": ele compara o estado desejado
+  # (Git) com o estado atual (cluster) e aplica as diferencas.
+  # E o componente que mais consome CPU em clusters com muitas apps.
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 250m
+      memory: 256Mi
+
+# ── Configuracao do Repo Server ──
+repo:
+  # Recursos do Repo Server.
+  # Este componente clona repositorios Git e gera manifests.
+  # E o que executa helm template, kustomize build, etc.
+  # Se voce tem muitos apps ou repos grandes, aumente os limites.
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 100m
+      memory: 128Mi
+
+# ── Configuracao do Redis ──
+redis:
+  # Recursos do Redis interno do ArgoCD.
+  # Usado como cache para o estado das aplicacoes.
+  # Nao confunda com Redis que voce usa nas suas aplicacoes.
+  # Este e exclusivo do ArgoCD.
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 100m
+      memory: 128Mi
