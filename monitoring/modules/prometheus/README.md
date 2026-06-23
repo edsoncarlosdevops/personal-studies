@@ -283,6 +283,88 @@ metric_relabel_configs:
 
 ---
 
+
+
+---
+
+## SLI, SLO e SLA — A Base da Observabilidade
+
+Esses 3 conceitos sao fundamentais para monitoramento. Sem eles, voce apenas "olha graficos" sem saber o que e aceitavel ou nao.
+
+### SLI (Service Level Indicator) — A metrica
+
+SLI e a metrica BRUTA que mede algum aspecto do servico. E o dado puro.
+
+| Aspecto | SLI (metrica) |
+|---------|---------------|
+| Disponibilidade | `avg(up)` = 0.98 (98%) |
+| Latencia | `p95(request_duration)` = 200ms |
+| Erro | `rate(http_5xx) / rate(http_total)` = 0.5% |
+| Throughput | `rate(requests_total)` = 1000 req/s |
+
+**SLI nao e "bom" ou "ruim"** — e apenas um numero. Voce precisa de um SLO para julgar.
+
+### SLO (Service Level Objective) — A meta
+
+SLO e a META que voce define para um SLI. E o que voce considera "dentro do aceitavel".
+
+```
+SLI: latencia p95 = 200ms
+SLO: latencia p95 < 500ms em 95% do tempo (rolling 30 dias)
+
+Interpretacao: em 95% do tempo dos ultimos 30 dias, a latencia
+p95 ficou abaixo de 500ms. Se ficou acima, o SLO foi violado.
+```
+
+**Diferenca critica entre metricas**: SLO usa `for` ou janela de tempo. Nao adianta ter 1 minuto de latencia alta — o SLO mede se isso e sustentado.
+
+```
+# Exemplo de SLO no Prometheus:
+# Queremos que a memoria NAO ultrapasse 90% do request
+# por mais de 5 minutos consecutivos
+expr: sum(container_memory_working_set_bytes) / sum(kube_pod_container_resource_requests{resource="memory"}) > 0.90
+for: 5m
+```
+
+**Por que 90% e nao 85%?** Porque se o SLO dispara toda hora, voce para de prestar atencao. O threshold precisa ser alto o suficiente para so disparar quando realmente estiver perto do problema.
+
+O SLO responde: "Esse servico esta saudavel OU precisa de atencao?"
+
+### SLA (Service Level Agreement) — O contrato
+
+SLA e o compromisso FORMAL com o cliente (ou com outro time). Geralmente tem consequencias financeiras.
+
+```
+SLI:  latencia p95
+SLO:  latencia p95 < 1s em 99.9% do tempo (meta interna)
+SLA:  latencia p95 < 2s em 99.5% do tempo (contrato com cliente)
+
+Se violar o SLA: multa, credito, ou penalidade contratual.
+Se violar o SLO: alerta, correcao, prevencao.
+```
+
+**Importante**: SLA quase sempre e MENOR (mais tolerante) que o SLO. Voce define SLOs mais rigorosos internamente para garantir que o SLA nunca seja violado.
+
+### Resumo pratico
+
+```
+SLI = "quanto estamos errando?" (0.5% de erro)
+SLO = "quanto podemos errar?" (max 1% de erro)
+SLA = "quanto prometemos ao cliente?" (max 2% de erro, com multa se passar)
+
+Seu SLO deve ser MAIS rigoroso que o SLA.
+Se o SLO disparar, voce tem tempo de corrigir antes de violar o SLA.
+```
+
+### Como usar no dia a dia
+
+1. **Defina SLIs para cada aspecto do servico**: disponibilidade, latencia, erro, throughput (RED metrics).
+2. **Crie SLOs realistas**: com base no que voce ja observa, nao no que deseja.
+3. **Ajuste os SLOs com o tempo**: se dispara muito, o threshold esta baixo ou os requests estao mal configurados.
+4. **Nao crie SLO para tudo**: foque nos indicadores que realmente impactam o usuario final.
+5. **SLAs sao contratuais**: envolva o time de produto e juridico para definir.
+
+
 ## Desafios Práticos
 
 ### 🟢 Nível 1 — Iniciante

@@ -7,13 +7,20 @@ replicaCount: ${grafana_replica_count}
 
 adminPassword: admin
 
+# --- Recursos do Grafana ---
+# VALORES AJUSTADOS baseados no consumo real observado (Jun/2026):
+#   Consumo real de CPU: ~18m (pico ~100m)
+#   Consumo real de RAM: ~109MB (pico ~200MB)
+#
+# Grafana e stateless, mas carrega dashboards e plugins no startup.
+# O consumo de RAM aumenta com o numero de dashboards e queries abertas.
 resources:
   limits:
     cpu: 500m
-    memory: 768Mi
+    memory: 512Mi
   requests:
-    cpu: 200m
-    memory: 128Mi
+    cpu: 100m
+    memory: 256Mi
 
 persistence:
   enabled: false

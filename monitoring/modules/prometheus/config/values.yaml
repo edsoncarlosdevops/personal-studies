@@ -25,13 +25,33 @@ server:
   global:
     scrape_interval: 15s
     evaluation_interval: 15s
+  # --- Recursos do Prometheus ---
+  # VALORES AJUSTADOS baseados no consumo real observado (Jun/2026):
+  #   Consumo real de CPU: ~46m  (pico ~200m)
+  #   Consumo real de RAM: ~548MB (pico ~700MB)
+  #
+  # Por que esses valores?
+  #   Antes: request 256Mi de RAM com consumo real 548Mi (214% do request).
+  #   Isso fazia o SLO_Memoria_dos_Pods disparar constantemente.
+  #
+  # Regra pratica para definir requests:
+  #   1. Observe o consumo real com `kubectl top pods -n monitoring`
+  #   2. Defina request = consumo real (ou ligeiramente abaixo)
+  #   3. Defina limit = 1.5x a 2x o request (para permitir picos)
+  #   4. Se o limit < consumo real, o pod pode ser throttled (CPU) ou OOMKilled (RAM)
+  #
+  # CONSEQUENCIA DE REQUESTS BAIXOS DEMAIS:
+  #   - SLO dispara falsos positivos (consumo/request > 85% mesmo sem problema real)
+  #   - Kubernetes scheduler subestima a necessidade do pod, alocando mais pods
+  #     no mesmo node do que deveria, causando pressao real de recursos
+  #   - Em caso de disputa, pods com request baixo sofrem throttling de CPU primeiro
   resources:
     limits:
-      cpu: 500m
+      cpu: 1000m
       memory: 1Gi
     requests:
       cpu: 100m
-      memory: 256Mi
+      memory: 768Mi
   persistentVolume:
     enabled: false
   serviceAccount:
@@ -107,7 +127,7 @@ serverFiles:
   # Organized into 3 groups: pods, nodes, application.
   # Each rule has a severity label for Alertmanager routing.
   # Rules are evaluated every 30s.
-  alerting_rules.yml: |
+  alerting_rules.yml:
     groups:
       - name: pods
         interval: 30s
@@ -182,6 +202,21 @@ serverFiles:
             annotations:
               summary: "Prometheus target down: {{ $labels.job }}/{{ $labels.instance }}"
               description: "Target {{ $labels.job }} ({{ $labels.instance }}) unreachable for >2 minutes."
+      # --- SLO (Service Level Objectives) ---
+      # SLOs definem metas internas de qualidade do servico.
+      # Diferente de alertas de incidente (ex: PodCrashLoopBackOff),
+      # SLOs medem saude acumulada ao longo do tempo.
+      #
+      # Por que o threshold e 90% e nao 85%?
+      #   Antes era 85%, mas com requests ajustados para valores realistas,
+      #   o consumo normal fica entre 60-80% do request.
+      #   90% significa: so dispara se realmente estiver perto de estourar.
+      #   Se disparar com frequencia, voce para de prestar atencao.
+      #
+      # Diferenca entre SLI, SLO e SLA (explicado no README):
+      #   SLI = metrica bruta (ex: latencia p95 = 200ms)
+      #   SLO = meta interna (ex: latencia p95 < 500ms em 99% do tempo)
+      #   SLA = compromisso com cliente (ex: latencia p95 < 1s, com multa)
       - name: slo
         interval: 30s
         rules:
@@ -195,7 +230,7 @@ serverFiles:
               summary: "SLO de Disponibilidade violado"
               description: "Disponibilidade dos servicos esta em {{ $value | humanizePercentage }} (meta: 95%)"
           - alert: SLO_Memoria_dos_Pods
-            expr: sum(container_memory_working_set_bytes{namespace="monitoring"}) / sum(kube_pod_container_resource_requests{namespace="monitoring", resource="memory"}) > 0.85
+            expr: sum(container_memory_working_set_bytes{namespace="monitoring"}) / sum(kube_pod_container_resource_requests{namespace="monitoring", resource="memory"}) > 0.90
             for: 5m
             labels:
               severity: warning
@@ -204,7 +239,7 @@ serverFiles:
               summary: "Uso de memoria acima do SLO"
               description: "Memoria acima de 85% do request"
           - alert: SLO_CPU_dos_Pods
-            expr: sum(rate(container_cpu_usage_seconds_total{namespace="monitoring"}[5m])) / sum(kube_pod_container_resource_requests{namespace="monitoring", resource="cpu"}) > 0.85
+            expr: sum(rate(container_cpu_usage_seconds_total{namespace="monitoring"}[5m])) / sum(kube_pod_container_resource_requests{namespace="monitoring", resource="cpu"}) > 0.90
             for: 5m
             labels:
               severity: warning

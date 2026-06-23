@@ -46,11 +46,19 @@ tempo:
 persistence:
   enabled: false
 
+# --- Recursos do Tempo ---
+# VALORES AJUSTADOS baseados no consumo real observado (Jun/2026):
+#   Consumo real de CPU: ~2m  (pico ~50m)
+#   Consumo real de RAM: ~529MB (pico ~700MB)
+#
+# Antes: request 256Mi de RAM com consumo real 529Mi (206% do request).
+# Tempo e stateful: mantem traces em memoria antes de flush para o S3.
+# Quanto mais trafego, mais memoria. O request precisa considerar isso.
 resources:
   limits:
     cpu: 500m
-    memory: 512Mi
+    memory: 1Gi
   requests:
     cpu: 100m
-    memory: 256Mi
+    memory: 768Mi
 

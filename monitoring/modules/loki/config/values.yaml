@@ -99,13 +99,23 @@ singleBinary:
   persistence:
     enabled: false
 
+  # --- Recursos do Loki ---
+  # VALORES AJUSTADOS baseados no consumo real observado (Jun/2026):
+  #   Consumo real de CPU: ~13m  (pico ~100m)
+  #   Consumo real de RAM: ~451MB (pico ~600MB)
+  #
+  # Antes: request 256Mi de RAM com consumo real 451Mi (176% do request).
+  # Isso fazia o SLO_Memoria_dos_Pods disparar constantemente.
+  #
+  # Loki e stateful: consome mais memoria no startup (carrega indices)
+  # e sob carga de consulta. O request precisa refletir isso.
   resources:
     limits:
       cpu: 1000m
       memory: 1Gi
     requests:
       cpu: 100m
-      memory: 256Mi
+      memory: 512Mi
 
 backend:
   replicas: 0

@@ -18,7 +18,7 @@
 #        → Loki (logs) + Prometheus (métricas) + Tempo (traces)
 # =============================================================================
 
-replicaCount: ${otel_collector_replica_count}
+replicaCount: 2
 
 # [IMPORTANTE] mode: daemonset
 # ----------------------------------------
@@ -179,7 +179,7 @@ config:
         # Tenta interpretar o log como JSON primeiro
         # (útil para logs estruturados como JSON)
         - type: json_parser
-          if: 'body matches "^{\\"'
+          if: 'body matches "^\\{"'
           timestamp:
             parse_from: attributes.time
             layout: '%Y-%m-%dT%H:%M:%S.%LZ'
@@ -294,10 +294,19 @@ config:
 #   - 100m CPU / 128Mi RAM → ~50 pods com logs ativos
 #   - 500m CPU / 512Mi RAM → ~500 pods com logs ativos
 # =============================================================================
+# --- Recursos do OpenTelemetry Collector ---
+# VALORES AJUSTADOS baseados no consumo real observado (Jun/2026):
+#   Consumo real de CPU: ~105m (pico ~200m)
+#   Consumo real de RAM: ~234MB (pico ~400MB)
+#
+# O OTel Collector e o componente que mais consome CPU (vs. outros agentes).
+# Motivo: ele processa logs (filelog receiver), aplica filtering e
+# envia para Loki. Quanto mais logs, mais CPU.
+# O request de CPU foi ajustado para 200m porque o consumo medio ja e 105m.
 resources:
   limits:
     cpu: 500m
     memory: 512Mi
   requests:
-    cpu: 100m
-    memory: 128Mi
+    cpu: 200m
+    memory: 256Mi
