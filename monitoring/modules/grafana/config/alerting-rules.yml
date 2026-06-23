@@ -115,8 +115,8 @@ groups:
       # 📊 SLI: uso de memória / request de memória
       #   Ex: Se um pod tem request=256Mi e está usando 200Mi → 78%
       #
-      # 🎯 SLO: < 85% do request
-      #   Meta: Não usar mais de 85% da memória solicitada
+      # 🎯 SLO: < 90% do request
+      #   Meta: Não usar mais de 90% da memória solicitada
       #
       # 📋 SLA: WARNING
       #   Se violar: Time é alertado (não crítico, mas precisa acompanhar)
@@ -153,10 +153,10 @@ groups:
             datasourceUid: "__expr__"
             model:
               type: "math"
-              expression: "$A > 0.85"
+              expression: "$A > 0.90"
               #                ^^^^^
               #                SLO: 85% da memória
-              #                Se passar de 85%, pode aproximar de OOM
+              #                Se passar de 90%, pode aproximar de OOM
               refId: "B"
 
           - refId: "C"
@@ -180,7 +180,7 @@ groups:
         annotations:
           summary: "SLO de Memoria violado"
           description: >-
-            SLI=Memoria usada/request | SLO=<85% | Valor atual: {{ $values.A }}
+            SLI=Memoria usada/request | SLO=<90% | Valor atual: {{ $values.A }}
             Risco: Se chegar a 100% → OOMKill (pod morto)
             Ação SLA: Verificar se precisa aumentar resource requests
 
@@ -191,8 +191,8 @@ groups:
       # 📊 SLI: uso de CPU / request de CPU
       #   Ex: Pod usando 200m de CPU com request=500m → 40%
       #
-      # 🎯 SLO: < 85% do request
-      #   Meta: Não usar mais de 85% da CPU solicitada
+      # 🎯 SLO: < 90% do request
+      #   Meta: Não usar mais de 90% da CPU solicitada
       #
       # 📋 SLA: WARNING
       #   CPU alta = lentidão. Se passar de 100%, o pod é throttled (limitado)
@@ -229,7 +229,7 @@ groups:
             datasourceUid: "__expr__"
             model:
               type: "math"
-              expression: "$A > 0.85"
+              expression: "$A > 0.90"
               #                ^^^^^
               #                SLO: 85% da CPU
               #                Acima disso, pode causar lentidão
@@ -256,7 +256,7 @@ groups:
         annotations:
           summary: "SLO de CPU violado"
           description: >-
-            SLI=CPU usada/request | SLO=<85% | Valor atual: {{ $values.A }}
+            SLI=CPU usada/request | SLO=<90% | Valor atual: {{ $values.A }}
             Risco: Acima de 100% → throttling (pod limitado)
             Ação SLA: Verificar necessidade de aumentar resource requests
 

@@ -1,5 +1,5 @@
 terraform {
-  source = "../../../../../../../monitoring/modules/observability/loki"
+  source = "../../../../../../../monitoring/modules/loki"
 }
 
 include "root" {

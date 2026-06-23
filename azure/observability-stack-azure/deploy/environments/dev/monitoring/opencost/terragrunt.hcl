@@ -1,5 +1,5 @@
 terraform {
-  source = "../../../../../../../monitoring/modules/observability/opencost"
+  source = "../../../../../../../monitoring/modules/opencost"
 }
 
 include "root" {

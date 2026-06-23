@@ -15,9 +15,7 @@ resource "helm_release" "opentelemetry_collector" {
   upgrade_install  = true
 
   values = [
-    templatefile("${path.module}/config/values.yaml", {
-      otel_collector_replica_count = var.otel_collector_replica_count
-    })
+    file("${path.module}/config/values.yaml")
   ]
 }
 

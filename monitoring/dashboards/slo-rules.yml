@@ -7,8 +7,8 @@
 # SLOs definidos:
 #   ✅ Disponibilidade:     > 95% dos serviços UP
 #   ✅ Confiabilidade:     Zero pods em CrashLoopBackOff
-#   ✅ Memória:            < 85% do request
-#   ✅ CPU:                < 85% do request
+#   ✅ Memória:            < 90% do request
+#   ✅ CPU:                < 90% do request
 # =============================================================================
 
 groups:
@@ -38,9 +38,9 @@ groups:
 
   - alert: SLO_Memoria_dos_Pods
     annotations:
-      description: "Memória acima de 85% do request"
+      description: "Memória acima de 90% do request"
       summary: "Uso de memória acima do SLO"
-    expr: sum(container_memory_working_set_bytes{namespace="monitoring"}) / sum(kube_pod_container_resource_requests{namespace="monitoring", resource="memory"}) > 0.85
+    expr: sum(container_memory_working_set_bytes{namespace="monitoring"}) / sum(kube_pod_container_resource_requests{namespace="monitoring", resource="memory"}) > 0.90
     for: 5m
     labels:
       severity: warning
@@ -48,9 +48,9 @@ groups:
 
   - alert: SLO_CPU_dos_Pods
     annotations:
-      description: "CPU acima de 85% do request"
+      description: "CPU acima de 90% do request"
       summary: "Uso de CPU acima do SLO"
-    expr: sum(rate(container_cpu_usage_seconds_total{namespace="monitoring"}[5m])) / sum(kube_pod_container_resource_requests{namespace="monitoring", resource="cpu"}) > 0.85
+    expr: sum(rate(container_cpu_usage_seconds_total{namespace="monitoring"}[5m])) / sum(kube_pod_container_resource_requests{namespace="monitoring", resource="cpu"}) > 0.90
     for: 5m
     labels:
       severity: warning
