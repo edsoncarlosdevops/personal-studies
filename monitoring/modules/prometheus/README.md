@@ -10,6 +10,7 @@
 - [PromQL Essencial](#promql-essencial)
 - [Depuração](#depuração)
 - [Cardinalidade](#cardinalidade)
+- [Desafios Práticos](#desafios-práticos)
 
 ---
 
@@ -278,4 +279,318 @@ metric_relabel_configs:
   - source_labels: [__name__]
     regex: 'etcd_(.*)'
     action: drop
+```
+
+---
+
+## Desafios Práticos
+
+### 🟢 Nível 1 — Iniciante
+
+#### Desafio 1: Descobrir qual namespace mais consome CPU
+
+**Contexto:** Você precisa identificar quais equipes estão usando mais CPU no cluster para planejar capacidade ou cobrar custos internos (chargeback/showback).
+
+**Ocorre quando:** Time de infra precisa reportar consumo por namespace, ou quando o cluster está próximo do limite e você precisa saber quem mais consome.
+
+**Query:**
+```promql
+topk(10, sum(rate(container_cpu_usage_seconds_total{namespace!=""}[5m])) by (namespace))
+```
+
+**Entendendo:** `rate(...[5m])` calcula a média de CPU por segundo nos últimos 5 minutos, `sum by(namespace)` agrupa por namespace, `topk(10)` pega os 10 maiores.
+
+**Como depurar se não funcionar:**
+```bash
+# Ver se a métrica existe
+curl -s 'http://localhost:9090/api/v1/query?query=container_cpu_usage_seconds_total' | jq '.data.result | length'
+
+# Ver namespaces disponíveis
+curl -s 'http://localhost:9090/api/v1/label/namespace/values'
+```
+
+---
+
+#### Desafio 2: Encontrar pod com mais restart
+
+**Contexto:** Um pod está reiniciando constantemente e você precisa identificar qual é para investigar a causa (OOM, liveness probe, crash).
+
+**Ocorre quando:** Pods em CrashLoopBackOff, ou você percebe downtime intermitente em um serviço.
+
+**Query:**
+```promql
+topk(10, increase(kube_pod_container_status_restarts_total[24h]))
+```
+
+**Entendendo:** `increase(...[24h])` calcula quantos restart ocorreram nas últimas 24h, `topk(10)` lista os 10 com mais restart. Normalmente pods devem ter 0 ou 1 restart. Acima de 5 indica problema grave.
+
+**Como depurar:**
+```bash
+# Ver restart de um pod específico
+curl -s 'http://localhost:9090/api/v1/query?query=kube_pod_container_status_restarts_total{namespace="monitoring"}' | jq '.data.result[] | {pod: .metric.pod, restarts: .value[1]}'
+
+# Causas comuns:
+# - OOM (Out of Memory): aumentar limits
+# - Liveness probe falhando: verificar endpoint
+# - Aplicação crashando: ver logs no Loki
+```
+
+---
+
+#### Desafio 3: Calcular % de memória usada vs request
+
+**Contexto:** Você quer saber se os pods estão perto de estourar o limite de memória para planejar ajustes de resource requests/limits.
+
+**Ocorre quando:** Planejamento de capacidade, ou antes de um deploy crítico para garantir que há folga.
+
+**Query:**
+```promql
+sum(container_memory_working_set_bytes{namespace="monitoring"}) by (pod)
+/
+sum(kube_pod_container_resource_requests{namespace="monitoring", resource="memory"}) by (pod) * 100
+```
+
+**Entendendo:** Divide o uso real (`working_set_bytes`) pelo request configurado. >80% indica que precisa aumentar o request. >100% significa que está usando swap ou sendo throttled (se CPU).
+
+**Interpretação:**
+| % | Significado | Ação |
+|---|-------------|------|
+| <50% | Super provisionado | Reduzir request |
+| 50-80% | Saudável | Manter |
+| 80-100% | Próximo do limite | Aumentar request |
+| >100% | Estourando | Aumentar request IMEDIATAMENTE |
+
+---
+
+### 🟡 Nível 2 — Intermediário
+
+#### Desafio 4: Alerta "namespace X está sem deploy há 7 dias"
+
+**Contexto:** Você quer saber se algum namespace está "abandonado" — tem pods rodando mas ninguém fez deploy recentemente. Pode indicar ambiente esquecido ou esteira quebrada.
+
+**Ocorre quando:** Times mudam de projeto e esquecem de desativar ambientes, ou a pipeline de deploy quebrou silenciosamente.
+
+**Query:**
+```promql
+time() - max(kube_deployment_created) by (namespace) > 604800
+```
+
+**Entendendo:** `kube_deployment_created` é o timestamp Unix de quando o deployment foi criado. `time() - ... > 604800` (7 dias em segundos) significa que nenhum deployment novo foi criado naquele namespace há mais de 7 dias.
+
+**Como depurar:**
+```bash
+# Ver deployments e quando foram criados
+curl -s 'http://localhost:9090/api/v1/query?query=kube_deployment_created' | jq '.data.result[] | {namespace: .metric.namespace, deployment: .metric.deployment, created: .value[1]}' | head -10
+
+# Se a métrica não existir, verificar se kube-state-metrics está ativo
+curl -s 'http://localhost:9090/api/v1/query?query=kube_deployment_created'
+```
+
+**Nota:** Essa query pega a criação inicial. Para detectar "último deploy" (nova imagem), use `kube_deployment_status_observed_generation` ou labels de imagem.
+
+---
+
+#### Desafio 5: Dashboard com dropdown de namespace (Template Variable)
+
+**Contexto:** Você quer um dashboard onde o usuário seleciona um namespace e todos os painéis filtram automaticamente.
+
+**Ocorre quando:** Qualquer dashboard que precise ser reutilizável para vários times ambientes.
+
+**Configuração no Grafana:**
+```
+Tipo: Query
+Name: namespace
+Query: label_values(kube_namespace_created, namespace)
+Multi-value: true
+Include All option: true
+```
+
+**Nos painéis:**
+```promql
+# Antes (fixo):
+rate(container_cpu_usage_seconds_total{namespace="monitoring"}[5m])
+
+# Depois (dinâmico):
+rate(container_cpu_usage_seconds_total{namespace=~"$namespace"}[5m])
+```
+
+**Entendendo:** A variável `$namespace` é substituída pelo valor selecionado no dropdown. `=~` permite regex, então pode selecionar múltiplos.
+
+**Como depurar se não funcionar:**
+```bash
+# Ver se a query da variável retorna resultados
+curl -s 'http://localhost:9090/api/v1/query?query=label_values(kube_namespace_created,%20namespace)' | jq '.data.result'
+
+# Se vazio, usar fonte alternativa:
+label_values(kube_pod_info, namespace)
+```
+
+---
+
+#### Desafio 6: Detectar vazamento de memória
+
+**Contexto:** Um pod está consumindo cada vez mais memória com o tempo, sem nunca liberar. Isso causa OOM eventualmente.
+
+**Ocorre quando:** Aplicações com memory leak, conexões não fechadas, caches sem limite.
+
+**Query:**
+```promql
+# Variação do uso nas últimas 6h
+deriv(container_memory_working_set_bytes{namespace="monitoring"}[6h])
+```
+
+**Entendendo:** `deriv()` calcula a inclinação da curva de uso. Valor positivo = memória crescendo (vazamento), valor próximo de zero = estável.
+
+**Alertando:**
+```promql
+# Alerta se a memória crescer continuamente por 2h
+deriv(container_memory_working_set_bytes{namespace="monitoring"}[2h]) > 0.1
+```
+
+---
+
+### 🔴 Nível 3 — Avançado
+
+#### Desafio 7: Calcular custo estimado por deployment
+
+**Contexto:** Você quer saber quanto cada deployment custa em termos de infraestrutura (CPU + RAM), mesmo sem OpenCost.
+
+**Ocorre quando:** Times de finanças pedem relatório de custo, ou você quer comparar eficiência entre serviços.
+
+**Query:**
+```promql
+# Custo estimado por deployment ($/h)
+sum by (deployment, namespace) (
+  rate(container_cpu_usage_seconds_total{container!=""}[5m]) * 0.04   # $0.04/core-hora
+  +
+  container_memory_working_set_bytes{container!=""} / 1024 / 1024 / 1024 * 0.005  # $0.005/GB-hora
+)
+```
+
+**Entendendo:** Cada núcleo de CPU custa ~$0.04/hora e cada GB de RAM ~$0.005/hora (valores aproximados para nuvem). Multiplique pelo uso real. Para custo mensal, multiplique por 730 (horas no mês).
+
+**Como depurar:**
+```bash
+# Verificar se as métricas existem
+curl -s 'http://localhost:9090/api/v1/query?query=container_cpu_usage_seconds_total{container!=""}' | jq '.data.result | length'
+
+# Ajustar valores de custo conforme sua nuvem (AWS, Azure, GCP)
+```
+
+**Variação com preços reais:**
+```promql
+# AWS us-east-1 (instância t3.medium como referência)
+# CPU: $0.0416/hora, RAM: $0.0056/GB-hora
+sum by (namespace) (
+  rate(container_cpu_usage_seconds_total{container!=""}[5m]) * 0.0416
+  +
+  container_memory_working_set_bytes{container!=""} / 1024 / 1024 / 1024 * 0.0056
+) * 730  # custo mensal estimado
+```
+
+---
+
+#### Desafio 8: Service graph — traces → métricas → alertas
+
+**Contexto:** Você quer monitorar a comunicação entre serviços (ex: api-pedidos → api-pagamentos). Quando um serviço está lento ou com erro, o service graph mostra.
+
+**Ocorre quando:** Arquitetura de microsserviços com múltiplas chamadas entre serviços.
+
+**Pré-requisitos:**
+- Tempo com metrics_generator ativado
+- Prometheus recebendo métricas do Tempo (`traces_service_graph_*`)
+- No mínimo 2 serviços se comunicando
+
+**Query:**
+```promql
+# Taxa de erro entre serviços
+rate(traces_service_graph_request_failed_total{cluster="monitoring"}[5m])
+/
+rate(traces_service_graph_request_total{cluster="monitoring"}[5m]) * 100
+
+# Latência p99
+histogram_quantile(0.99, rate(traces_service_graph_request_duration_seconds_bucket[5m]))
+```
+
+**Alerta:**
+```promql
+# Se erro > 5% entre api-pedidos e api-pagamentos
+rate(traces_service_graph_request_failed_total{cluster="monitoring"}[5m])
+/
+rate(traces_service_graph_request_total{cluster="monitoring"}[5m]) * 100 > 5
+```
+
+**Como depurar se não funcionar:**
+```bash
+# Verificar se metrics_generator está ativo
+curl -s 'http://localhost:9090/api/v1/query?query=traces_service_graph_request_total' | jq '.data.result'
+
+# Se vazio:
+# 1. Verificar se Tempo tem metrics_generator configurado
+# 2. Verificar se remote_write aponta para o Prometheus correto
+# 3. Verificar se há spans de 2 serviços diferentes
+```
+
+---
+
+#### Desafio 9: SLO com burn rate alerting
+
+**Contexto:** Você tem um SLO de 99.9% de disponibilidade e quer ser alertado antes de violá-lo. Burn rate alerting detecta quando o erro está acelerando.
+
+**Ocorre quando:** Equipe de plataforma define SLOs formais para serviços críticos.
+
+**Conceito:** Burn rate = taxa na qual o orçamento de erro está sendo consumido. Se o burn rate > 1, você vai violar o SLO antes do período.
+
+**Query (SLO 99.9%, janela de 1h):**
+```promql
+# Erro total na última hora
+sum(rate(http_requests_total{status=~"5.."}[1h]))
+/
+sum(rate(http_requests_total[1h]))
+*
+# Se > 0.1% de erro, está queimando orçamento
+100 > 0.1
+```
+
+**Burn rate em 3 janelas (multi-window):**
+```promql
+# Alerta se erro > 0.1% nos últimos 5m E > 0.05% nos últimos 30m
+# Isso evita falso positivo (pico curto)
+sum(rate(http_requests_total{status=~"5.."}[5m])) / sum(rate(http_requests_total[5m])) * 100 > 0.1
+and
+sum(rate(http_requests_total{status=~"5.."}[30m])) / sum(rate(http_requests_total[30m])) * 100 > 0.05
+```
+
+**Entendendo:** A condição `and` exige que ambas as métricas sejam verdadeiras. Isso significa que o erro está elevado tanto na janela curta (5m) quanto na longa (30m), indicando um problema real, não um pico isolado.
+
+---
+
+#### Desafio 10: Predição de saturação de disco
+
+**Contexto:** Você quer saber quando o disco de um node vai encher para planejar expansão antes do incidente.
+
+**Ocorre quando:** Nodes com disco local, ou volumes com crescimento constante (logs, dados de banco).
+
+**Query:**
+```promql
+# Prever disponibilidade em 7 dias
+predict_linear(node_filesystem_avail_bytes{mountpoint="/", fstype!=""}[7d], 7*24*3600) < 0
+```
+
+**Entendendo:** `predict_linear()` usa regressão linear nos últimos 7 dias de dados para projetar o valor em 7 dias (7*24*3600 segundos). Se a projeção for < 0, o disco vai encher.
+
+**Alerta em 2 estágios:**
+```promql
+# Warning: disco vai encher em 7 dias
+predict_linear(node_filesystem_avail_bytes{mountpoint="/", fstype!=""}[7d], 7*24*3600) < 10*1024*1024*1024
+
+# Critical: disco vai encher em 48h
+predict_linear(node_filesystem_avail_bytes{mountpoint="/", fstype!=""}[7d], 48*3600) < 0
+```
+
+**Como depurar:**
+```bash
+# Ver espaço atual
+curl -s 'http://localhost:9090/api/v1/query?query=node_filesystem_avail_bytes{mountpoint="/"}' | jq '.data.result[].value[1]'
+# Converter: divida por 1024^3 para GB
 ```

@@ -403,3 +403,375 @@ processors:
 | Pequeno | < 100 | 1 CPU / 2GB | 2 CPU / 4GB | 1 CPU / 2GB | S3/OSS |
 | Médio | 100-1000 | 2 CPU / 4GB | 4 CPU / 8GB | 2 CPU / 4GB | S3/OSS |
 | Grande | 1000+ | 4 CPU / 8GB | 8 CPU / 16GB | 4 CPU / 8GB | S3/OSS + caching |
+
+---
+
+## Desafios Práticos
+
+### 🟢 Nível 1 — Iniciante
+
+#### Desafio 1: Buscar traces de um serviço específico
+
+**Contexto:** Você quer ver todos os traces do serviço `api-pedidos` para entender o fluxo de requisições.
+
+**Ocorre quando:** Investigação de performance, entender dependências entre serviços, ou debug de um bug específico.
+
+**TraceQL:**
+```traceql
+{ resource.service.name = "api-pedidos" }
+```
+
+**No Grafana:**
+- Abra o **Explore** do Tempo
+- Selecione **TraceQL** no modo de busca
+- Cole a query acima
+- Limite a 20 traces e ordenando por **Most recent**
+
+**Entendendo:** `resource.service.name` é um atributo semântico do OpenTelemetry que identifica o serviço. Todo span tem esse atributo.
+
+**Como depurar se não funcionar:**
+```bash
+# Verificar se o Tempo está recebendo traces
+curl -s http://localhost:3100/metrics | grep tempo_ingester_spans_received
+
+# Ver se o serviço está enviando spans
+# (no pod da aplicação)
+kubectl logs -n monitoring -l app=api-pedidos --tail=50 | grep "otel\|tempo\|trace"
+```
+
+---
+
+#### Desafio 2: Encontrar traces lentos (>2s)
+
+**Contexto:** Você quer identificar quais requisições estão lentas para priorizar otimizações.
+
+**Ocorre quando:** Usuários reclamam de lentidão, ou você quer criar um SLO de latência.
+
+**TraceQL:**
+```traceql
+{ duration > 2s }
+```
+
+**No Grafana:**
+- Ordene por **Duration (descendente)** para ver os mais lentos primeiro
+- Clique em um trace para ver a waterfall (qual span está consumindo mais tempo)
+
+**Entendendo:** `duration` é o tempo total do trace (soma de todos os spans). >2s significa que a requisição completa levou mais de 2 segundos.
+
+**Como depurar o trace lento:**
+- Na waterfall, procure spans com duração alta (vermelho)
+- Identifique se o gargalo é: banco, HTTP externo, processamento interno
+- Ex: span `SELECT * FROM pedidos` levando 1.5s indica query lenta
+
+---
+
+#### Desafio 3: Buscar traces com erro HTTP
+
+**Contexto:** Você quer ver traces que resultaram em erro HTTP 500 para investigar a causa.
+
+**Ocorre quando:** Alerta de HTTP 5xx disparou, ou você está fazendo uma análise de resiliência.
+
+**TraceQL:**
+```traceql
+{ .http.status_code >= 500 }
+```
+
+**Entendendo:** `.http.status_code` é um atributo do span de entrada HTTP. >=500 captura todos os erros de servidor (500, 502, 503, etc). O `.` indica atributo do span (não do resource).
+
+**Variações úteis:**
+```traceql
+# Apenas 500
+{ .http.status_code = 500 }
+
+# Apenas 404
+{ .http.status_code = 404 }
+
+# Qualquer erro (4xx ou 5xx)
+{ .http.status_code >= 400 }
+```
+
+---
+
+### 🟡 Nível 2 — Intermediário
+
+#### Desafio 4: Encontrar traces com erro em um endpoint específico
+
+**Contexto:** Você quer ver traces com erro HTTP no endpoint `/api/pedidos` para monitorar a saúde desse fluxo específico.
+
+**Ocorre quando:** Um deploy recente quebrou um endpoint específico, ou você está validando uma correção.
+
+**TraceQL:**
+```traceql
+{ .http.route = "/api/pedidos" && .http.status_code >= 500 }
+```
+
+**Entendendo:** `&&` combina duas condições. Apenas spans que atendem a ambas (rota = "/api/pedidos" E status >= 500) são retornados.
+
+**No Grafana:** Crie um botão no dashboard que abre essa busca pré-configurada no Explore.
+
+**Como depurar se não funcionar:**
+```bash
+# Verificar se a aplicação envia atributos HTTP
+# (no OTEL SDK da aplicação)
+# Exemplo em Python:
+from opentelemetry.semconv.trace import HttpFlavorValues
+```
+
+Se `.http.route` não estiver disponível, tente `.http.target` ou `.http.url`.
+
+---
+
+#### Desafio 5: Waterfall analysis — encontrar span mais lento
+
+**Contexto:** Você abriu um trace lento e quer identificar qual span específico está consumindo mais tempo.
+
+**Ocorre quando:** Análise de performance, otimização de endpoint.
+
+**No Grafana (após abrir o trace):**
+1. Veja a **Waterfall View** (barra horizontal de cada span)
+2. Identifique o span mais largo (mais tempo)
+3. Veja os atributos desse span (ex: `db.statement`, `http.url`, `http.method`)
+
+**Exemplo de interpretação:**
+| Span | Duração | Causa |
+|------|---------|-------|
+| `HTTP POST /api/pedidos` | 3.2s | Requisição total |
+| `SELECT * FROM pedidos` | 2.8s | ⚠️ Query lenta (87% do tempo) |
+| `HTTP POST /api/pagamentos` | 0.3s | Chamada externa rápida |
+| `JSON serialization` | 0.1s | Processamento interno |
+
+**Ação:** Nesse caso, a query SQL é o gargalo (2.8s de 3.2s). Adicione índice ou otimize a query.
+
+---
+
+#### Desafio 6: Ver traces entre 2 serviços (dependências)
+
+**Contexto:** Você quer ver traces que passam por `api-pedidos` E `api-pagamentos` para entender a comunicação entre eles.
+
+**Ocorre quando:** Investigação de latência em chamadas síncronas entre microsserviços.
+
+**TraceQL:**
+```traceql
+{ resource.service.name = "api-pedidos" } >> { resource.service.name = "api-pagamentos" }
+```
+
+**Entendendo:** `>>` significa "ancestral de". Essa query retorna traces onde api-pedidos (ancestral) chamou api-pagamentos (descendente).
+
+**No service graph (Grafana):**
+- Vá em **Explore → Service Graph**
+- Selecione os 2 serviços
+- Veja: request rate, error rate, latency entre eles
+
+**Como depurar se não funcionar:**
+```bash
+# Verificar se ambos os serviços estão instrumentados
+curl -s 'http://localhost:9090/api/v1/query?query=traces_service_graph_request_total{client="api-pedidos"}' | jq '.data.result'
+
+# Se vazio, um dos serviços não está enviando spans
+```
+
+---
+
+### 🔴 Nível 3 — Avançado
+
+#### Desafio 7: Metrics Generator — criar RED metrics para Prometheus
+
+**Contexto:** Você quer taxas de erro, latência e throughput dos seus serviços sem instrumentar manualmente cada aplicação.
+
+**Ocorre quando:** Stack de observabilidade com múltiplos serviços, onde instrumentar cada um é inviável.
+
+**O que o Metrics Generator faz:**
+
+```
+Traces (Tempo) → Metrics Generator → Métricas (Prometheus)
+```
+
+**Métricas geradas automaticamente:**
+
+```promql
+# Rate (throughput)
+rate(traces_service_graph_request_total{client="api-pedidos"}[5m])
+
+# Errors
+rate(traces_service_graph_request_failed_total{client="api-pedidos"}[5m])
+
+# Latency (p99)
+histogram_quantile(0.99, rate(traces_span_metrics_latency_bucket{service="api-pedidos"}[5m]))
+```
+
+**Configuração necessária no Tempo:**
+```yaml
+metrics_generator:
+  processors: [service_graphs, span_metrics]
+  registry:
+    remote_write:
+      - url: http://prometheus-server:80/api/v1/write
+```
+
+**Como depurar se não funcionar:**
+```bash
+# 1. Verificar se metrics_generator está ativo
+curl -s http://localhost:3100/ready
+
+# 2. Verificar se as métricas chegaram no Prometheus
+curl -s 'http://localhost:9090/api/v1/query?query=traces_service_graph_request_total' | jq '.data.result | length'
+
+# 3. Verificar remote_write
+kubectl logs -n monitoring deployment/tempo | grep "remote_write\|generator"
+```
+
+---
+
+#### Desafio 8: Correlacionar logs (Loki) com traces (Tempo)
+
+**Contexto:** Você viu um erro no Loki e quer abrir o trace completo para entender o contexto.
+
+**Ocorre quando:** Debugging de ponta a ponta — do log ao span.
+
+**Configuração necessária (já feita):**
+
+1. **Aplicação:** Deve incluir `trace_id` nos logs
+2. **Loki:** Derived fields configurado para linkar ao Tempo
+3. **Tempo:** Recebendo traces da mesma aplicação
+
+**Fluxo:**
+```
+1. Veja o log no Grafana:
+   {namespace="monitoring"} |= "error"
+
+2. Clique no trace_id (link azul)
+
+3. Abre o trace completo no Explore Tempo
+
+4. Veja a waterfall com todos os spans
+```
+
+**Como garantir que trace_id está no log:**
+```python
+# Exemplo Python com OpenTelemetry + structlog
+import structlog
+from opentelemetry import trace
+
+tracer = trace.get_tracer(__name__)
+logger = structlog.get_logger()
+
+with tracer.start_as_current_span("processar_pedido"):
+    span = trace.get_current_span()
+    trace_id = span.get_span_context().trace_id
+    logger.info("processando pedido", trace_id=format(trace_id, '032x'))
+```
+
+---
+
+#### Desafio 9: Sampling seletivo — preservar traces importantes
+
+**Contexto:** O volume de traces é alto e você precisa armazenar apenas os mais importantes (erros e lentos) para economizar storage.
+
+**Ocorre quando:** Alto throughput (>1000 spans/s), ou limite de custo com object storage.
+
+**Estratégia: Head-based sampling (no OTEL Collector):**
+
+```yaml
+processors:
+  probabilistic_sampler:
+    sampling_percentage: 10  # 10% de todos os traces
+  tail_sampling:
+    policies:
+      # Preservar TODOS os traces com erro
+      - name: error-policy
+        type: status_code
+        status_code: ERROR
+        sampling_percentage: 100
+      # Preservar traces lentos (>2s)
+      - name: slow-policy
+        type: latency
+        threshold_ms: 2000
+        sampling_percentage: 100
+      # Preservar traces de endpoints críticos
+      - name: critical-endpoints
+        type: string_attribute
+        key: http.route
+        values: [ "/api/pagamentos", "/api/pedidos/checkout" ]
+        sampling_percentage: 100
+```
+
+**Entendendo:** `probabilistic_sampler` amostra 10% dos traces. `tail_sampling` garante que traces com erro, lentos ou de endpoints críticos sejam 100% preservados independente da amostragem.
+
+**Cuidado:** `tail_sampling` precisa de mais memória porque avalia os spans depois de recebidos.
+
+---
+
+#### Desafio 10: Service Graph completo com alerta
+
+**Contexto:** Você quer monitorar a comunicação entre todos os serviços e ser alertado quando uma dependência falha.
+
+**Ocorre quando:** Arquitetura de microsserviços com dependências críticas.
+
+**Pré-requisitos:**
+- Tempo com Metrics Generator + Service Graphs
+- Prometheus recebendo métricas do Tempo
+- No mínimo 2 serviços se comunicando
+
+**Service Graph no Grafana:**
+```json
+# Dashboard com visualização de service graph
+{
+  "title": "Service Graph",
+  "type": "traces",
+  "datasource": "Tempo",
+  "query": {
+    "query": "{ resource.service.name = \"api-pedidos\" } >> { resource.service.name = \"api-pagamentos\" }"
+  }
+}
+```
+
+**Métricas disponíveis:**
+```promql
+# Requests entre serviços
+rate(traces_service_graph_request_total{client="api-pedidos", server="api-pagamentos"}[5m])
+
+# Erros entre serviços
+rate(traces_service_graph_request_failed_total{client="api-pedidos", server="api-pagamentos"}[5m])
+
+# Latência entre serviços
+histogram_quantile(0.99, rate(traces_service_graph_request_duration_seconds_bucket{client="api-pedidos", server="api-pagamentos"}[5m]))
+```
+
+**Alerta completo:**
+```yaml
+groups:
+  - name: service_graph_alerts
+    rules:
+      - alert: ServiceHighErrorRate
+        expr: |
+          rate(traces_service_graph_request_failed_total{client="api-pedidos", server="api-pagamentos"}[5m])
+          /
+          rate(traces_service_graph_request_total{client="api-pedidos", server="api-pagamentos"}[5m]) * 100 > 5
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: 'api-pedidos → api-pagamentos com {{ $value | humanizePercentage }} de erro'
+          description: 'A comunicação entre api-pedidos e api-pagamentos está com taxa de erro alta.'
+
+      - alert: ServiceLatencyHigh
+        expr: |
+          histogram_quantile(0.99, rate(traces_service_graph_request_duration_seconds_bucket{client="api-pedidos", server="api-pagamentos"}[5m])) > 1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: 'Latência alta entre api-pedidos → api-pagamentos'
+          description: 'P99 de latência > 1s na comunicação entre serviços.'
+```
+
+**Como depurar se não funcionar:**
+```bash
+# Verificar service graphs
+curl -s 'http://localhost:9090/api/v1/query?query=traces_service_graph_request_total' | jq '.data.result | length'
+
+# Se vazio, verificar a configuração do metrics_generator:
+# 1. processors inclui service_graphs?
+# 2. remote_write aponta para o Prometheus?
+# 3. Há pelo menos 2 serviços com spans?
+```
